@@ -1,6 +1,7 @@
-from rubicon.objc import ObjCClass, Block
+from rubicon.objc import ObjCClass, ObjCInstance, Block
 from rubicon.objc.runtime import objc_id
 import threading
+import toga
 
 # Let's test the workflow of analysing an address
 address = input("Search address")
@@ -24,17 +25,16 @@ def perform_map_search(search_string):
     # 2. Define the target callback function
     def search_callback(response_ptr: objc_id, error_ptr: objc_id) -> None:
         if error_ptr:
-	    error = ObjCClass('NSError')._from_ptr(error_ptr)
-	    print(f"Search failed: {error.localizedDescription}")
-	    return
+            error = ObjCInstance(error_ptr)
+            print(f"Search failed: {error.localizedDescription}")
+        else:
+            response = ObjCInstance(response_ptr)
+            mapItems = list(response.mapItems)
+            print(f"Found {len(mapItems)} result(s):")
 
-        response = ObjCClass('MKLocalSearchResponse')._from_ptr(response_ptr)
-	print(f"Found {response.mapItems.count} results:")
-
-	# Loop through native search results
-        for i in range(response.mapItems.count):
-	    item = response.mapItems.objectAtIndex(i)
-	    print(f" - {item.name}: {item.placemark.title}")
+            # Loop through native search results
+            for item in mapItems:
+                print(f" - {item.name}: {item.placemark.title}")
         waiter.set()
 
     # 3. Wrap it in a Rubicon Block
