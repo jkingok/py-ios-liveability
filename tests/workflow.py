@@ -40,6 +40,7 @@ waiter = threading.Event()
 
 found_address = None
 found_service = None
+results = {}
 
 def perform_map_search(search_string):
     # Load the native MapKit classes
@@ -123,7 +124,59 @@ def perform_map_search_near(search_string):
     search = MKLocalSearch.alloc().initWithRequest(request)
     search.startWithCompletionHandler(objc_block)
 
+def perform_route():
+    MKDirectionsRequest = ObjCClass('MKDirectionsRequest')
+    MKDirections = ObjCClass('MKDirections')
+    MKDistanceFormatter = ObjCClass('MKDistanceFormatter')
+    NSDateComponentsFormatter = ObjCClass('NSDateComponentsFormatter')
 
+    # Initialize Formatters for elegant localise-aware outputs
+    dist_formatter = MKDistanceFormatter.alloc().init()
+    dist_formatter.unitsStyle = 1 # Abbreviated (e.g., "km", "m")
+    
+    time_formatter = NSDateComponentsFormatter.alloc().init()
+    time_formatter.unitsStyle = 1 # Abbreviated (e.g., "hr", "min")
+    time_formatter.allowedUnits = (1 << 5) | (1 << 6) # Hour | Minute
+
+    # Define our directions pairs: (Source, Destination, Label)
+    global found_address
+    global found_service
+    directions = [
+        (found_address[1], found_service[1], "Outbound"),
+        (found_service[1], found_address[1], "Inbound")
+    ]
+    directions_waiting = len(directions)
+    
+    for source, dest, direction_label in directions:
+        request = MKDirectionsRequest.alloc().init()
+        request.source = source
+        request.destination = dest
+        request.transportType = mode_val
+        request.requestsAlternateRoutes = False
+
+        directions_calculator = MKDirections.alloc().initWithRequest(request)
+        
+        # Internal flags to manage the async network callback
+        data_holder = {'done': False, 'route': None, 'error': None}
+        
+        # Define the Objective-C completion block wrapper
+        def completion_handler(response, error):
+            if error:
+                data_holder['error'] = error
+            elif response and len(rs := list(response.routes)) > 0:
+                data_holder['route'] = (r := rs[0])
+                global results
+                results[direction_label] = {
+                    "distance": str(dist_formatter.stringFromDistance(r.distance)),
+                    "expected_time": str(time_formatter.stringFromTimeInterval(r.expectedTravelTime))
+                }
+            data_holder['done'] = True
+            directions_waiting -= 1
+            if directions_waiting == 0:
+                waiter.set()
+
+            # Call Apple servers asynchronously
+            directions_calculator.calculateDirectionsWithCompletionHandler(Block(completion_handler))
 
 waiter.clear()
 toga.App.app.loop.call_soon(lambda address=address: perform_map_search(address))
@@ -134,5 +187,11 @@ if found_address:
 	waiter.clear()
 	toga.App.app.loop.call_soon(lambda service=service: perform_map_search_near(service))
 	waiter.wait()
+	if found_service:
+		waiter.clear()
+		toga.App.app.loop.call_soon(perform_route)
+		waiter.wait()
 
+		for k, v in results.items():
+			print(f"{k}: {v["distance"]}, {v["expected_time"]}")
 print("Done.")
