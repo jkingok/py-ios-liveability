@@ -1,34 +1,21 @@
+import ctypes
 from rubicon.objc import ObjCClass, ObjCInstance, Block
 from rubicon.objc.runtime import load_library, objc_id
+from rubicon.objc.types import get_ctype_for_type, process_type_encoding
 import threading
 import toga
 
-import ctypes
-from rubicon.objc import ObjCClass, load_library
+# Force Rubicon to parse and register the encoding into its cache
+process_type_encoding(b'{CLLocationCoordinate2D=dd}')
+process_type_encoding(b'{MKCoordinateSpan=dd}')
+process_type_encoding(b'{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}}')
 
-# Define the coordinate structure
-class CLLocationCoordinate2D(ctypes.Structure):
-    _fields_ = [
-        ("latitude", ctypes.c_double),
-        ("longitude", ctypes.c_double)
-    ]
-
-# Define the coordinate span structure
-class MKCoordinateSpan(ctypes.Structure):
-    _fields_ = [
-        ("latitudeDelta", ctypes.c_double),
-        ("longitudeDelta", ctypes.c_double)
-    ]
-
-# Define the coordinate region structure
-class MKCoordinateRegion(ctypes.Structure):
-    _fields_ = [
-        ("center", CLLocationCoordinate2D),
-        ("span", MKCoordinateSpan)
-    ]
+# Now it is guaranteed to exist in the registry
+CLLocationCoordinate2D = get_ctype_for_type(b'{CLLocationCoordinate2D=dd}')
+MKCoordinateRegion = get_ctype_for_type(b'{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}')
 
 # Load the MapKit framework
-# On macOS, MapKit is located within the /System/Library/Frameworks directory
+# On macOS/iOS, MapKit is located within the /System/Library/Frameworks directory
 mk = load_library('/System/Library/Frameworks/MapKit.framework/MapKit')
 
 # Locate the function
@@ -36,8 +23,8 @@ MKCoordinateRegionMakeWithDistance = mk.MKCoordinateRegionMakeWithDistance
 
 # Define argument types: CLLocationCoordinate2D, double (lat meters), double (long meters)
 MKCoordinateRegionMakeWithDistance.argtypes = [
-    CLLocationCoordinate2D, 
-    ctypes.c_double, 
+    CLLocationCoordinate2D,
+    ctypes.c_double,
     ctypes.c_double
 ]
 
@@ -80,6 +67,7 @@ def perform_map_search(search_string):
                 # Loop through native search results
                 for item in mapItems:
                     print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)} @ {item.location.coordinate}")
+                global found_address
                 found_address = (mapItems[0].name, mapItems[0])
 
         waiter.set()
@@ -102,7 +90,8 @@ def perform_map_search_near(search_string):
     request = MKLocalSearchRequest.alloc().init()
     request.naturalLanguageQuery = search_string
 
-    # Optional: You c	an bound it to Australia or a specific region if you have coordinates
+    # Optional: You can bound it to Australia or a specific region if you have coordinates
+    global found_address
     if found_address:
         request.region = MKCoordinateRegionMakeWithDistance(found_address[1].location.coordinate, 10000.0, 10000.0)
 
@@ -120,6 +109,7 @@ def perform_map_search_near(search_string):
                 # Loop through native search results
                 for item in mapItems:
                     print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)}")
+                global found_service
                 found_service = (item.name, item)
 
         waiter.set()
