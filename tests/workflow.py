@@ -1,18 +1,13 @@
 import ctypes
 from rubicon.objc import ObjCClass, ObjCInstance, Block
 from rubicon.objc.runtime import load_library, objc_id
-from rubicon.objc.types import get_ctype_for_type, process_type_encoding
+from rubicon.objc.types import ctype_for_encoding
 import threading
 import toga
 
 # Force Rubicon to parse and register the encoding into its cache
-process_type_encoding(b'{CLLocationCoordinate2D=dd}')
-process_type_encoding(b'{MKCoordinateSpan=dd}')
-process_type_encoding(b'{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}}')
-
-# Now it is guaranteed to exist in the registry
-CLLocationCoordinate2D = get_ctype_for_type(b'{CLLocationCoordinate2D=dd}')
-MKCoordinateRegion = get_ctype_for_type(b'{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}')
+CLLocationCoordinate2D = ctype_for_encoding(b'{CLLocationCoordinate2D=dd}')
+MKCoordinateRegion = ctype_for_encoding(b'{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}}')
 
 # Load the MapKit framework
 # On macOS/iOS, MapKit is located within the /System/Library/Frameworks directory
