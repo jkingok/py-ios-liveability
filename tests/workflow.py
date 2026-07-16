@@ -146,7 +146,7 @@ def perform_route():
         request = MKDirectionsRequest.alloc().init()
         request.source = source
         request.destination = dest
-        request.transportType = mode_val
+        request.transportType = 1 # Driving
         request.requestsAlternateRoutes = False
 
         directions_calculator = MKDirections.alloc().initWithRequest(request)
