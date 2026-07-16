@@ -106,7 +106,7 @@ def perform_map_search_near(search_string):
                 for item in mapItems:
                     print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)}")
                 global found_service
-                found_service = (item.name, item)
+                found_service = (mapItems[0].name, mapItems[0])
 
         waiter.set()
 
@@ -118,6 +118,8 @@ def perform_map_search_near(search_string):
     # 4. Initialize the search and kick it off
     search = MKLocalSearch.alloc().initWithRequest(request)
     search.startWithCompletionHandler(objc_block)
+
+directions_waiting = 0 
 
 def perform_route():
     MKDirectionsRequest = ObjCClass('MKDirectionsRequest')
@@ -137,16 +139,19 @@ def perform_route():
     global found_address
     global found_service
     directions = [
-        (found_address[1], found_service[1], "Outbound"),
-        (found_service[1], found_address[1], "Inbound")
+        (found_address[1], found_service[1], 1, "Outbound by Car"),
+        (found_service[1], found_address[1], 1, "Inbound by Car"),
+        (found_address[1], found_service[1], 2, "Outbound on Foot"),
+        (found_service[1], found_address[1], 2, "Inbound on Foot")
     ]
+    global directions_waiting
     directions_waiting = len(directions)
     
-    for source, dest, direction_label in directions:
+    for source, dest, mode, direction_label in directions:
         request = MKDirectionsRequest.alloc().init()
         request.source = source
         request.destination = dest
-        request.transportType = 1 # Driving
+        request.transportType = mode # 1 = Driving, 2 = Walking
         request.requestsAlternateRoutes = False
 
         directions_calculator = MKDirections.alloc().initWithRequest(request)
@@ -155,23 +160,24 @@ def perform_route():
         data_holder = {'done': False, 'route': None, 'error': None}
         
         # Define the Objective-C completion block wrapper
-        def completion_handler(response, error):
+        def completion_handler(name, response, error):
             if error:
-                data_holder['error'] = error
-            elif response and len(rs := list(response.routes)) > 0:
+                data_holder['error'] = ObjCInstance(error)
+            elif response and len(rs := list(ObjCInstance(response).routes)) > 0:
                 data_holder['route'] = (r := rs[0])
                 global results
-                results[direction_label] = {
+                results[name] = {
                     "distance": str(dist_formatter.stringFromDistance(r.distance)),
                     "expected_time": str(time_formatter.stringFromTimeInterval(r.expectedTravelTime))
                 }
             data_holder['done'] = True
+            global directions_waiting
             directions_waiting -= 1
             if directions_waiting == 0:
                 waiter.set()
 
-            # Call Apple servers asynchronously
-            directions_calculator.calculateDirectionsWithCompletionHandler(Block(completion_handler))
+        # Call Apple servers asynchronously
+        directions_calculator.calculateDirectionsWithCompletionHandler(Block(lambda r, e, n=direction_label: completion_handler(n, r, e), None, objc_id, objc_id))
 
 waiter.clear()
 toga.App.app.loop.call_soon(lambda address=address: perform_map_search(address))
