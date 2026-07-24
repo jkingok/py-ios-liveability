@@ -1,17 +1,21 @@
+import asyncio
+import ctypes
 from markdown import markdown as md
 from pathlib import Path
 import requests
-from rubicon.objc import ObjCClass
+from rubicon.objc import ObjCClass, ObjCInstance, Block
+from rubicon.objc.runtime import load_library, objc_id
+from rubicon.objc.types import ctype_for_encoding
+import threading
 import toga
 import urllib
 
+from . import bridge as b
 from . import data as d
 from . import functions as f
 from . import model as m
 from . import settings as s
 from . import widgets as ws
-
-UIPasteboard = ObjCClass('UIPasteboard')
 
 class Prototype:
     def __init__(self, host_app, on_done):
@@ -30,13 +34,43 @@ class Prototype:
         await self.app.main_window.dialog(toga.InfoDialog("TODO", name))
         
     def add_address(self, url=None):
+        def record_item(mi):
+            self.app.addresses.save(
+                str(i.identifierString if (i := mi.identifier) else mi.name),
+                {
+                    "title": str(mi.name),
+                    "subtitle": str(mi.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)),
+                    "latitude": mi.location.coordinate.latitude,
+                    "longitude": mi.location.coordinate.longitude
+                }
+            )
+
+        def geocoded(r: objc_id, e: objc_id) -> None:
+            if e:
+                asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure", ObjCInstance(e).localizedDescription)))
+            else:
+                l = list(ObjCInstance(r))
+                if len(l) == 1:
+                    record_item(l[0])
+                else:
+                    asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure","Could not determine address")))
+                    record_item(b.MKMapItem.alloc().initWithLocation(loc))
+
         if not url:
-            if (pb := UIPasteboard.generalPasteboard).hasURLs:
-                return self.add_address(str(pb.URL.absoluteString))
-        else:
+            print("nothing to search yet")
+            if (pb := b.UIPasteboard.generalPasteboard).hasURLs and pb.URL and (u := pb.URL.absoluteString):
+                print("got url")
+                return self.add_address(str(u))
+            elif pb.hasStrings and (s := pb.string):
+                print("got str")
+                return self.add_address(str(s))
+            else:
+                #input("Search for an address")
+                return None 
+        elif url.startswith("http"):
             print(url)
             pu = urllib.parse.urlparse(url)
-            if pu.netloc == 'maps.apple':
+            if pu.netloc in ['maps.apple', 'maps.app.goo.gl']:
                 # Needs expanding
                 try:
                     # Should be async
@@ -44,10 +78,18 @@ class Prototype:
                     return self.add_address(response.url)
                 except Exception as e:
                     print(f"Error resolving short URL: {e}")
+                    return None
             elif pu.netloc == 'maps.apple.com':
                 p = urllib.parse.parse_qs(pu.query)
-                self.app.addresses.save(p['name'][0], {"title": p['name'][0], "subtitle": p['coordinate'][0]})
- 
+                loc = b.CLLocation.alloc().initWithLatitude(float((ll := p['coordinate'][0].split(','))[0]), longitude=float(ll[1]))
+                rgr = b.MKReverseGeocodingRequest.alloc().initWithLocation(loc)
+                rgr.getMapItemsWithCompletionHandler(geocoded)
+            else:
+                asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure", "Cannot extract location from URL"))) 
+        else:
+            gr = b.MKGeocodingRequest.alloc().initWithAddressString(url)
+            gr.getMapItemsWithCompletionHandler(geocoded)
+
     def get_content(self):
         class EditAddressBox(toga.Box):
             def __init__(self, stack=None, key=None, values=None):

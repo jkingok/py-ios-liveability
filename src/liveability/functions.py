@@ -46,18 +46,34 @@ class Functions:
 
     def init_db(self) -> None:
         with sqlite3.connect(self.db_file) as conn:
-            # Alter columns smoothly if database already exists
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS schema_versions (
+                    name TEXT PRIMARY KEY,
+                    version INTEGER
+                ) STRICT
+            """)
+            cursor = conn.execute("""
+                SELECT version FROM schema_versions WHERE name = 'address'
+            """)
+            # Schema updates
+            v = r[0] if (r := cursor.fetchone()) else 0 
+            # TODO Alter columns smoothly if table already exists
+            conn.executescript(""" 
                 CREATE TABLE IF NOT EXISTS address (
-                    identifier TEXT PRIMARY KEY, title TEXT, subtitle TEXT
-                )
+                    identifier TEXT PRIMARY KEY,
+                    title TEXT,
+                    subtitle TEXT,
+                    latitude REAL,
+                    longitude REAL
+                ) STRICT;
+                UPDATE schema_versions SET version = 1 WHERE name = 'address'
             """)
         print("Database ready.")
 
     def get_address_by_id(self, query_identifier: str) -> d.Address | None:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute(
-                "SELECT title, subtitle FROM address WHERE identifier = ?",
+                "SELECT title, subtitle, latitude, longitude FROM address WHERE identifier = ?",
                 (query_identifier,)
             )
             row = cursor.fetchone()
@@ -66,8 +82,8 @@ class Functions:
     def save_address(self, query_identifier: str, a: d.Address) -> None:
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO address VALUES (?, ?, ?)",
-                (query_identifier,  a.title, a.subtitle)
+                "INSERT OR REPLACE INTO address VALUES (?, ?, ?, ?, ?)",
+                (query_identifier,  a.title, a.subtitle, a.latitude, a.longitude)
             )
 
     def delete_address(self, query_identifier: str) -> None:
@@ -82,7 +98,7 @@ class Functions:
     def map_addresses(self) -> dict[str, d.Address]:
         cache = {}
         with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.execute("SELECT identifier, title, subtitle FROM address")
+            cursor = conn.execute("SELECT identifier, title, subtitle, latitude, longitude FROM address")
             for row in cursor.fetchall():
                 cache[row[0]] = d.Address(*row[1:])
         return cache
@@ -90,7 +106,7 @@ class Functions:
     def load_addresses(self) -> list[d.Address]:
         cache = []
         with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.execute("SELECT title, subtitle FROM address")
+            cursor = conn.execute("SELECT title, subtitle, latitude, longitude FROM address")
             for row in cursor.fetchall(): 
                 cache.append(d.Address(*row))
         return cache

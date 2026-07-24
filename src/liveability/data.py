@@ -2,5 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Address:
-    title: str= ""
-    subtitle: str= ""
+    title: str
+    subtitle: str
+    latitude: float
+    longitude: float
