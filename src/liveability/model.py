@@ -42,17 +42,17 @@ class AddressModel:
                 "icon": toga.Image(f) if (f := self.cache_path / f"images/maps/{key}.png").exists() else None,
                 "index": key
             })
-        if self.list_count_label:
-            self.list_count_label.text = self.item_count_text()
-        if self.map:
-            self.map.location = self.find_centre()
-            self.map.pins.clear()
-            for pin in [toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.get_pins())]:
-                self.map.pins.add(pin)
+            if self.list_count_label:
+                self.list_count_label.text = self.item_count_text()
+            if self.map:
+                self.map.location = self.find_centre()
+                self.map.pins.clear()
+                for pin in [toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.get_pins())]:
+                    self.map.pins.add(pin)
 
     def item_count_text(self):
         return f"{len(self.items_list_source)} location(s)"
- 
+         
     def set_list_count_label(self, w):
         self.list_count_label = w
         w.text = self.item_count_text()
@@ -66,9 +66,6 @@ class AddressModel:
             w.pins.add(pin)
         return w
 
-    def add_from_mapitem(self, mi):
-        pass
-        
     def get(self, key):
         return self.fns.get_address_by_id(key)  
 
@@ -98,3 +95,63 @@ class AddressModel:
 
     def get_pins(self):
         return [(value.latitude, value.longitude) for key, value in self.fns.map_addresses().items()]
+
+class ServiceModel:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            # Create the single instance and cache it on the class
+            cls._instance = super().__new__(cls)
+            # Initialize flags or containers that only ever happen ONCE
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, paths, fns):
+        # __init__ runs EVERY time you call,
+        # so guard it to ensure it only initializes once.
+        if self._initialized:
+            return
+        self.fns = fns
+        self.cache_path = paths.cache
+        self.items_list_source = ListSource(
+            accessors=["title", "subtitle", "icon", "index"],
+            data=[]
+        )
+        self.list_count_label = None
+        self.reload_items()
+        self._initialized = True
+        
+    def reload_items(self, widget=None, row=None):
+        self.items_list_source.clear()
+        for key, value in self.fns.map_services().items():
+            # Safely build a toga.Image if an icon path was specified and exists
+            self.items_list_source.append({
+                "title": value.name,
+                "subtitle": value.emoji,
+                "icon": toga.Image(f) if (f := self.cache_path / f"images/icons/{key}.png").exists() else None,
+                "index": key
+            })
+        if self.list_count_label:
+            self.list_count_label.text = self.item_count_text()
+
+    def item_count_text(self):
+        return f"{len(self.items_list_source)} service(s)"
+ 
+    def set_list_count_label(self, w):
+        self.list_count_label = w
+        w.text = self.item_count_text()
+        return w
+ 
+    def get(self, key):
+        return self.fns.get_service_by_id(key)  
+
+    def save(self, key, values):
+        self.fns.save_service(key, d.Service(**values))
+        # TODO Be able to find and update correct item to avoid full reload
+        self.reload_items()
+
+    def delete(self, key):
+        self.fns.delete_service(key)
+        # TODO Be able to find and update correct item to avoid full reload
+        self.reload_items()

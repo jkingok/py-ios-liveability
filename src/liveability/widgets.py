@@ -159,7 +159,7 @@ if toga.platform.current_platform == 'iOS':
             handlers = { action[0]: action[1] for action in actions if len(action) > 1 and action[1] }
             def on_done(action_ptr: ObjCInstance) -> None:
                 if (title := str(ObjCInstance(action_ptr).title)) in handlers:
-                    outputs = [ tf.text for tf in alert.textFields ] 
+                    outputs = [ str(tf.text) for tf in alert.textFields ] 
                     handlers[title](title, *outputs)
 
             for action in actions:

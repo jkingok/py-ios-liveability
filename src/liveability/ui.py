@@ -26,6 +26,7 @@ class Prototype:
         self.app.settings = s.Settings(host_app.paths)
         self.app.functions = f.Functions(host_app.paths, self.app.settings)
         self.app.addresses = m.AddressModel(host_app.paths, self.app.functions)
+        self.app.services = m.ServiceModel(host_app.paths, self.app.functions)
         self.data_path = self.app.paths.data
         self.this_path = Path(__file__).resolve().parent
         self.icon_path = self.this_path / "resources" / "icons"
@@ -89,6 +90,19 @@ class Prototype:
 
     def ask_for_address(self):
         ws.Utils.ask_for_input(self.app, "Add Address", "Enter an address, search term or tap to Paste", [("Add",   self.add_by_name), ("Paste", self.add_by_paste), ("Cancel",)], 1)
+
+    def add_service(self, title, name, emoji):
+        self.app.services.save(
+            name,
+            {
+                "name": name,
+                "emoji": emoji
+            }
+        )
+ 
+    def ask_for_service(self):
+        ws.Utils.ask_for_input(self.app, "Service", "Enter an address, search term, and a symbol to use for it", [("Add", self.add_service), ("Cancel",)], 2)
+
 
     def get_content(self):
         class EditAddressBox(toga.Box):
@@ -156,6 +170,66 @@ class Prototype:
             def set_value(self, k, v):
                 setattr(self.values, k, v)
 
+        class EditServiceBox(toga.Box):
+            def __init__(self, stack=None, key=None, values=None):
+                self.key = key or dt.datetime.now().isoformat()
+                self.values = values or d.Service()
+                super().__init__(
+                    direction="column",
+                    children=[
+                        ws.LabelledText(
+                            "Key",
+                            #id="edit_key",
+                            value_text=self.key,
+                            readonly=True
+                        ),
+                        toga.Divider(),
+                        ws.LabelledText(
+                            "Name",
+                            #id="edit_title"
+                            value_text=self.values.name,
+                            callback=lambda w: {
+                                self.set_value("name", w.value)
+                            }
+                        ),
+                        ws.LabelledText(
+                            "Symbol",
+                            #id="edit_subtitle"
+                            value_text=self.values.emoji,
+                            callback=lambda w: {
+                                self.set_value("emoji", w.value)
+                            } 
+                        ),
+                        toga.Box(
+                            flex=1
+                        ), 
+                        toga.Row(
+                            children=[
+                                toga.Button(
+                                    "Back",
+                                    flex=1,
+                                    on_press=lambda w: {
+                                        self.app.widgets[self.stack].pop()
+                                    } 
+                                ),
+                                toga.Button(
+                                    "Save",
+                                    flex=1,
+                                    on_press=lambda w: (
+                                        self.app.services.save(self.key, self.values),
+                                        self.app.widgets[self.stack].pop()
+                                    )
+                                )
+                            ]
+                        )  
+                    ],
+                    flex=1
+                )
+                self.stack = stack
+                
+            def set_value(self, k, v):
+                setattr(self.values, k, v)
+
         return toga.OptionContainer(
             content=[
                 ("List", ws.StackContainer(
@@ -194,8 +268,35 @@ class Prototype:
                             flex=1
                         ))
                     ]), self.icon_path / "list.png"),
-                ("Setup", toga.Column(
-                    children=[
+                ("Setup", ws.StackContainer(
+                    id="stack_setup",
+                    direction="column",
+                    children = [
+                        toga.Row(
+                            children=[
+
+                                self.app.services.set_list_count_label(toga.Label("", flex=1)),
+                                toga.Button(
+                                    "Add",
+                                    on_press=lambda _: self.ask_for_service()
+                                )
+                            ]
+                        ),   
+                        toga.DetailedList(
+                        
+                            flex=1,
+                            on_refresh=lambda w: {
+                                self.app.services.reload_items()
+                            },
+                            primary_action="View",
+                            on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
+                            secondary_action="Delete",
+                            on_secondary_action=lambda w, row: self.app.services.delete(row.index),
+                            on_select=lambda w: {
+                                self.app.widgets["stack_setup"].push(EditServiceBox("stack_setup", i := w.selection.index, self.app.services.get(i)))
+                            },
+                            data=self.app.services.items_list_source
+                        ),
                         toga.Button(
                             "Exit",
                             visibility="visible" if hasattr(self.app.main_window, "content_stack") and len(self.app.main_window.content_stack) > 0 else "hidden",

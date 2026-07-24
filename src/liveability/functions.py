@@ -52,6 +52,7 @@ class Functions:
                     version INTEGER
                 ) STRICT
             """)
+ 
             cursor = conn.execute("""
                 SELECT version FROM schema_versions WHERE name = 'address'
             """)
@@ -68,6 +69,22 @@ class Functions:
                 ) STRICT;
                 UPDATE schema_versions SET version = 1 WHERE name = 'address'
             """)
+            
+            cursor = conn.execute("""
+                SELECT version FROM schema_versions WHERE name = 'service'
+            """)
+            # Schema updates
+            v = r[0] if (r := cursor.fetchone()) else 0 
+            # TODO Alter columns smoothly if table already exists
+            conn.executescript(""" 
+                CREATE TABLE IF NOT EXISTS service (
+                    identifier TEXT PRIMARY KEY,
+                    name TEXT,
+                    emoji TEXT
+                ) STRICT;
+                UPDATE schema_versions SET version = 1 WHERE name = 'service'
+            """)
+ 
         print("Database ready.")
 
     def get_address_by_id(self, query_identifier: str) -> d.Address | None:
@@ -109,4 +126,45 @@ class Functions:
             cursor = conn.execute("SELECT title, subtitle, latitude, longitude FROM address")
             for row in cursor.fetchall(): 
                 cache.append(d.Address(*row))
+        return cache
+ 
+    def get_service_by_id(self, query_identifier: str) -> d.Service | None:
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.execute(
+                "SELECT name, emoji FROM service WHERE identifier = ?",
+                (query_identifier,)
+            )
+            row = cursor.fetchone()
+        return d.Service(*row) if row else None
+
+    def save_service(self, query_identifier: str, a: d.Service) -> None:
+        with sqlite3.connect(self.db_file) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO service VALUES (?, ?, ?)",
+                (query_identifier,  a.name, a.emoji)
+            )
+
+    def delete_service(self, query_identifier: str) -> None:
+        """Deletes an service from the database by its query_identifier."""
+        # Normalise the key exactly how it was saved
+        with sqlite3.connect(self.db_file) as conn:
+            conn.execute(
+                "DELETE FROM service WHERE identifier = ?",
+                (query_identifier,)
+            )
+
+    def map_services(self) -> dict[str, d.Service]:
+        cache = {}
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.execute("SELECT identifier, name, emoji FROM service")
+            for row in cursor.fetchall():
+                cache[row[0]] = d.Service(*row[1:])
+        return cache
+
+    def load_services(self) -> list[d.Service]:
+        cache = []
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.execute("SELECT name, emoji FROM service")
+            for row in cursor.fetchall(): 
+                cache.append(d.Service(*row))
         return cache
