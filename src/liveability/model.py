@@ -28,6 +28,7 @@ class AddressModel:
             data=[]
         )
         self.list_count_label = None
+        self.map = None
         self.reload_items()
         self._initialized = True
 
@@ -43,6 +44,11 @@ class AddressModel:
             })
         if self.list_count_label:
             self.list_count_label.text = self.item_count_text()
+        if self.map:
+            self.map.location = self.find_centre()
+            self.map.pins.clear()
+            for pin in [toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.get_pins())]:
+                self.map.pins.add(pin)
 
     def item_count_text(self):
         return f"{len(self.items_list_source)} location(s)"
@@ -52,8 +58,15 @@ class AddressModel:
         w.text = self.item_count_text()
         return w
 
+    def set_map(self, w):
+        self.map = w
+        w.location = self.find_centre()
+        w.pins.clear()
+        for pin in [toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.get_pins())]:
+            w.pins.add(pin)
+        return w
+
     def add_from_mapitem(self, mi):
-        #return self.fns.fetch_single_tmdb_id(int(m.group(2)), m.group(1)) if (m := self.fns.extract_from_tmdb_url(url)) else None
         pass
         
     def get(self, key):
@@ -68,3 +81,20 @@ class AddressModel:
         self.fns.delete_address(key)
         # TODO Be able to find and update correct item to avoid full reload
         self.reload_items()
+
+    def find_centre(self):
+        l_la = None
+        u_la = None
+        l_lo = None
+        u_lo = None
+        for key, value in self.fns.map_addresses().items():
+            la = value.latitude
+            lo = value.longitude 
+            l_la = la if (not l_la) or (la < l_la) else l_la
+            u_la = la if (not u_la) or (la > u_la) else u_la
+            l_lo = lo if (not l_lo) or (lo < l_lo) else l_lo
+            u_lo = lo if (not u_lo) or (lo > u_lo) else u_lo
+        return ((l_la + u_la) / 2, (l_lo + u_lo) / 2) if (l_la and u_la and l_lo and u_lo) else None
+
+    def get_pins(self):
+        return [(value.latitude, value.longitude) for key, value in self.fns.map_addresses().items()]

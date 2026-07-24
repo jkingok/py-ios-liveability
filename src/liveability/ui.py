@@ -1,5 +1,6 @@
 import asyncio
 import ctypes
+import datetime as dt
 from markdown import markdown as md
 from pathlib import Path
 import requests
@@ -171,6 +172,7 @@ class Prototype:
                             ]
                         ),   
                         toga.DetailedList(
+                        
                             flex=1,
                             on_refresh=lambda w: {
                                 self.app.addresses.reload_items()
@@ -183,7 +185,14 @@ class Prototype:
                                 self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := w.selection.index, self.app.addresses.get(i)))
                             },
                             data=self.app.addresses.items_list_source
-                        ) 
+                        ),
+                        self.app.addresses.set_map(toga.MapView(
+                            location=self.app.addresses.find_centre(),
+                            zoom=7,
+                            pins=[toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.app.addresses.get_pins())],
+                            on_select=lambda w, pin: self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, self.app.addresses.get(i))),
+                            flex=1
+                        ))
                     ]), self.icon_path / "list.png"),
                 ("Setup", toga.Column(
                     children=[
