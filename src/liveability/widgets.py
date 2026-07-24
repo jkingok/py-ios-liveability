@@ -86,6 +86,57 @@ class LabelledText(toga.Box):
             **kwargs     
         )
 
+class LabelledProgress(toga.Box):
+    def __init__(self, **kwargs):
+        self.bar = toga.ProgressBar(flex=1)
+        self.text = toga.Label("")
+        super().__init__(
+            direction="row",
+            align_items="center",
+            children=[
+                self.bar,
+                self.text
+            ],
+            **kwargs
+        )
+
+    def start(self, limit:int=0):
+        self.bar.max = limit if limit > 0 else None
+        self.bar.start()
+        self.update(0)
+
+    def update(self, value:int):
+        if self.bar.max:
+            if self.bar.max == 100:
+                self.text.text = f"{value}%"
+            else:
+                self.text.text = f"{value}/{int(self.bar.max)}"
+        else:
+            self.text.text = "" 
+        self.bar.value = value
+  
+    def stop(self):
+        if self.bar.max:
+            self.update(self.bar.max)
+        self.bar.stop() 
+
+class LabelledActivity(toga.Box):
+    def __init__(self, **kwargs):
+        self.activity = toga.ActivityIndicator()
+        self.text = toga.Label("", flex=1)
+        super().__init__(
+            direction="row",
+            children=[
+                self.activity,
+                self.text
+            ],
+            **kwargs
+        )
+
+    def update(self, value:str="", on:bool=True):
+        self.activity.start() if on else self.activity.stop()
+        self.text.text=value
+
 class StackContainer(toga.Box):
    def __init__(self, **kwargs):
       super().__init__(**kwargs)

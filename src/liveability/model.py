@@ -1,4 +1,5 @@
 import datetime as dt
+from itertools import product
 from pathlib import Path
 import toga
 from toga.sources import ListSource
@@ -29,8 +30,12 @@ class AddressModel:
         )
         self.list_count_label = None
         self.map = None
+        self.listeners = []
         self.reload_items()
         self._initialized = True
+
+    def register(self, callback):
+        self.listeners.append(callback)
 
     def reload_items(self, widget=None, row=None):
         self.items_list_source.clear()
@@ -49,6 +54,8 @@ class AddressModel:
                 self.map.pins.clear()
                 for pin in [toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.get_pins())]:
                     self.map.pins.add(pin)
+            for l in self.listeners:
+                l() 
 
     def item_count_text(self):
         return f"{len(self.items_list_source)} location(s)"
@@ -119,9 +126,13 @@ class ServiceModel:
             data=[]
         )
         self.list_count_label = None
+        self.listeners = [] 
         self.reload_items()
         self._initialized = True
         
+    def register(self, callback):
+        self.listeners.append(callback)
+
     def reload_items(self, widget=None, row=None):
         self.items_list_source.clear()
         for key, value in self.fns.map_services().items():
@@ -134,6 +145,8 @@ class ServiceModel:
             })
         if self.list_count_label:
             self.list_count_label.text = self.item_count_text()
+        for l in self.listeners:
+            l()  
 
     def item_count_text(self):
         return f"{len(self.items_list_source)} service(s)"
@@ -155,3 +168,55 @@ class ServiceModel:
         self.fns.delete_service(key)
         # TODO Be able to find and update correct item to avoid full reload
         self.reload_items()
+
+class ComparisonModel:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            # Create the single instance and cache it on the class
+            cls._instance = super().__new__(cls)
+            # Initialize flags or containers that only ever happen ONCE
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, paths, fns):
+        # __init__ runs EVERY time you call,
+        # so guard it to ensure it only initializes once.
+        if self._initialized:
+            return
+        self.fns = fns
+        self.cache_path = paths.cache
+        self.items_list_source = ListSource(
+            accessors=["title", "subtitle", "icon", "index"],
+            data=[]
+        )
+        self.activity = None
+        self.progress = None
+        self.comparisons = {}
+        self.reload_items()
+        AddressModel._instance.register(self.reload_items)
+        ServiceModel._instance.register(self.reload_items)
+        self._initialized = True
+
+    def reload_items(self):
+        # The amount of work to be done
+        comparisons_total = int(len(AddressModel._instance.items_list_source) * len(ServiceModel._instance.items_list_source))
+        if self.activity:
+            self.activity.update("Busy", True)
+        if self.progress:
+            self.progress.start(comparisons_total)
+        
+        # Start scheduling work
+        for a, s in product(AddressModel._instance.items_list_source, ServiceModel._instance.items_list_source):
+            print(f"TODO {a.title} to {s.title}") 
+
+    def set_activity(self, w):
+        self.activity = w
+        self.reload_items()
+        return w
+
+    def set_progress(self, w):
+        self.progress = w
+        self.reload_items()
+        return w

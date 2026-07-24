@@ -27,6 +27,7 @@ class Prototype:
         self.app.functions = f.Functions(host_app.paths, self.app.settings)
         self.app.addresses = m.AddressModel(host_app.paths, self.app.functions)
         self.app.services = m.ServiceModel(host_app.paths, self.app.functions)
+        self.app.comparisons = m.ComparisonModel(host_app.paths, self.app.functions)
         self.data_path = self.app.paths.data
         self.this_path = Path(__file__).resolve().parent
         self.icon_path = self.this_path / "resources" / "icons"
@@ -266,7 +267,14 @@ class Prototype:
                             pins=[toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.app.addresses.get_pins())],
                             on_select=lambda w, pin: self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, self.app.addresses.get(i))),
                             flex=1
-                        ))
+                        )),
+                        toga.Row(
+                            align_items="center",
+                            children=[
+                                self.app.comparisons.set_activity(ws.LabelledActivity(id="app_activity")),
+                                self.app.comparisons.set_progress(ws.LabelledProgress(id="app_progress", flex=1))
+                            ]
+                        )
                     ]), self.icon_path / "list.png"),
                 ("Setup", ws.StackContainer(
                     id="stack_setup",
