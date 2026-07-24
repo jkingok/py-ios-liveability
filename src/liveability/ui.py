@@ -33,7 +33,7 @@ class Prototype:
     async def todo(self, name):
         await self.app.main_window.dialog(toga.InfoDialog("TODO", name))
         
-    def add_address(self, url=None):
+    def add_address(self, text=None, url=None):
         def record_item(mi):
             self.app.addresses.save(
                 str(i.identifierString if (i := mi.identifier) else mi.name),
@@ -56,29 +56,16 @@ class Prototype:
                     asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure","Could not determine address")))
                     record_item(b.MKMapItem.alloc().initWithLocation(loc))
 
-        if not url:
-            print("nothing to search yet")
-            if (pb := b.UIPasteboard.generalPasteboard).hasURLs and pb.URL and (u := pb.URL.absoluteString):
-                print("got url")
-                return self.add_address(str(u))
-            elif pb.hasStrings and (s := pb.string):
-                print("got str")
-                return self.add_address(str(s))
-            else:
-                #input("Search for an address")
-                return None 
-        elif url.startswith("http"):
-            print(url)
+        if url:
             pu = urllib.parse.urlparse(url)
             if pu.netloc in ['maps.apple', 'maps.app.goo.gl']:
                 # Needs expanding
                 try:
                     # Should be async
                     response = requests.get(url, allow_redirects=True)
-                    return self.add_address(response.url)
+                    self.add_address(url=response.url)
                 except Exception as e:
                     print(f"Error resolving short URL: {e}")
-                    return None
             elif pu.netloc == 'maps.apple.com':
                 p = urllib.parse.parse_qs(pu.query)
                 loc = b.CLLocation.alloc().initWithLatitude(float((ll := p['coordinate'][0].split(','))[0]), longitude=float(ll[1]))
@@ -87,8 +74,20 @@ class Prototype:
             else:
                 asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure", "Cannot extract location from URL"))) 
         else:
-            gr = b.MKGeocodingRequest.alloc().initWithAddressString(url)
+            gr = b.MKGeocodingRequest.alloc().initWithAddressString(text)
             gr.getMapItemsWithCompletionHandler(geocoded)
+
+    def add_by_name(self, title, name):
+         self.add_address(text=name)
+
+    def add_by_paste(self, title, name):
+        if (pb := b.UIPasteboard.generalPasteboard).hasURLs and pb.URL and (u := pb.URL.absoluteString):
+            self.add_address(url=str(u))
+        elif pb.hasStrings and (s := pb.string):
+            self.add_address(text=str(s))
+
+    def ask_for_address(self):
+        ws.Utils.ask_for_input(self.app, "Add Address", "Enter an address, search term or tap to Paste", [("Add",   self.add_by_name), ("Paste", self.add_by_paste), ("Cancel",)], 1)
 
     def get_content(self):
         class EditAddressBox(toga.Box):
@@ -120,6 +119,11 @@ class Prototype:
                             callback=lambda w: {
                                 self.set_value("subtitle", w.value)
                             } 
+                        ),
+                        toga.MapView(
+                            location=(ll := (self.values.latitude, self.values.longitude)),
+                            zoom=15,
+                            pins=(toga.MapPin(ll, title="Address"),)
                         ),
                         toga.Box(
                             flex=1
@@ -162,7 +166,7 @@ class Prototype:
                                 self.app.addresses.set_list_count_label(toga.Label("", flex=1)),
                                 toga.Button(
                                     "Add",
-                                    on_press=lambda _: self.add_address()
+                                    on_press=lambda _: self.ask_for_address()
                                 )
                             ]
                         ),   

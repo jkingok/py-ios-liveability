@@ -110,17 +110,22 @@ class PlatformUtils(GenericUtils):
     def close_keyboard(widget):
         pass
 
+    def ask_for_input(w, title, message, actions, texts=0):
+        pass
+  
     def open_share_sheet(w, html_file_path):
         pass
 
 if toga.platform.current_platform == 'iOS':
-    from rubicon.objc import ObjCClass
+    from rubicon.objc import ObjCClass, ObjCInstance
 
     # Load the required Objective-C classes
-    UIActivityViewController = ObjCClass('UIActivityViewController')
     NSURL = ObjCClass('NSURL')
     NSMutableArray = ObjCClass('NSMutableArray')
-
+    UIActivityViewController = ObjCClass('UIActivityViewController')
+    UIAlertController = ObjCClass("UIAlertController")
+    UIAlertAction = ObjCClass("UIAlertAction")
+    
     class IOSUtils(PlatformUtils):
         def close_keyboard(widget):
             """Triggered when the user presses 'Return' or 'Done' on the iPad keyboard."""
@@ -136,7 +141,33 @@ if toga.platform.current_platform == 'iOS':
             except Exception as e:
                 # Graceful fallback for macOS/Windows desktop development runners
                 print(f"[Platform Fallback] Could not reach native interface: {e}")
-            
+
+        def ask_for_input(w, title, message, actions=[], texts=0):
+            # Preferred Styles: 0 = ActionSheet, 1 = Alert
+            # Text fields not allowed in Sheets
+            alert = UIAlertController.alertControllerWithTitle(
+                title,
+                message=message,
+                preferredStyle=1
+            )
+
+            # Add text input field
+            for i in range(texts):
+                alert.addTextFieldWithConfigurationHandler_(None)
+
+            # Define action handler
+            handlers = { action[0]: action[1] for action in actions if len(action) > 1 and action[1] }
+            def on_done(action_ptr: ObjCInstance) -> None:
+                if (title := str(ObjCInstance(action_ptr).title)) in handlers:
+                    outputs = [ tf.text for tf in alert.textFields ] 
+                    handlers[title](title, *outputs)
+
+            for action in actions:
+                alert.addAction(UIAlertAction.actionWithTitle(action[0], style=0, handler=on_done))
+
+            # Present modally
+            w.main_window._impl.native.rootViewController.presentViewController(alert, animated=True, completion=None)
+
         def open_share_sheet(w, html_file_path: str):
             """
             Opens the iOS native share sheet for a specific HTML file.
