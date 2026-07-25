@@ -107,7 +107,7 @@ class Prototype:
 
     def get_content(self):
         class EditAddressBox(toga.Box):
-            def __init__(self, stack=None, key=None, values=None):
+            def __init__(self, stack=None, key=None, values=None, details=None):
                 self.key = key or dt.datetime.now().isoformat()
                 self.values = values or d.Address()
                 super().__init__(
@@ -141,8 +141,15 @@ class Prototype:
                             zoom=15,
                             pins=(toga.MapPin(ll, title="Address"),)
                         ),
-                        toga.Box(
-                            flex=1
+                        toga.DetailedList(
+                            flex=1,
+                            #on_refresh=lambda w: self.app.addresses.reload_items(),
+                            primary_action="View",
+                            on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
+                            #secondary_action="Delete",
+                            #on_secondary_action=lambda w, row: self.app.addresses.delete(row.index),
+                            #on_select=lambda w: self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := w.selection.index, self.app.addresses.get(i))),
+                            data=details
                         ), 
                         toga.Row(
                             children=[
@@ -256,9 +263,7 @@ class Prototype:
                             on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
                             secondary_action="Delete",
                             on_secondary_action=lambda w, row: self.app.addresses.delete(row.index),
-                            on_select=lambda w: {
-                                self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := w.selection.index, self.app.addresses.get(i)))
-                            },
+                            on_select=lambda w: self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := w.selection.index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
                             data=self.app.addresses.items_list_source
                         ),
                         self.app.addresses.set_map(toga.MapView(

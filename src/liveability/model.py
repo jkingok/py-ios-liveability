@@ -187,13 +187,15 @@ class ComparisonModel:
             return
         self.fns = fns
         self.cache_path = paths.cache
-        self.items_list_source = ListSource(
-            accessors=["title", "subtitle", "icon", "index"],
-            data=[]
-        )
+        self.items_list_sources = {}
+        #ListSource(
+        #    accessors=["title", "subtitle", "icon", "index"],
+        #    data=[]
+        #)
         self.activity = None
-        self.progress = None
+        self.progress = None 
         self.comparisons = {}
+        self.busy = False
         self.reload_items()
         AddressModel._instance.register(self.reload_items)
         ServiceModel._instance.register(self.reload_items)
@@ -202,14 +204,32 @@ class ComparisonModel:
     def reload_items(self):
         # The amount of work to be done
         comparisons_total = int(len(AddressModel._instance.items_list_source) * len(ServiceModel._instance.items_list_source))
-        if self.activity:
-            self.activity.update("Busy", True)
+        comparisons_done = 0
+        
         if self.progress:
             self.progress.start(comparisons_total)
         
         # Start scheduling work
         for a, s in product(AddressModel._instance.items_list_source, ServiceModel._instance.items_list_source):
-            print(f"TODO {a.title} to {s.title}") 
+            # Check if the comparison exists
+            if a.title not in self.items_list_sources:
+                self.items_list_sources[a.title] = ListSource(
+                    accessors=["title", "subtitle", "icon", "index"],
+                    data=[]
+                )
+            if not self.items_list_sources[a.title].find({"title": s.title }, default=None):
+                print(f"TODO {a.title} to {s.title}")
+                self.items_list_sources[a.title].append({
+                    "title": s.title,
+                    "subtitle": "TODO",
+                    "icon": None,
+                    "index": f"{a.title} to {s.title}"
+                })
+            comparisons_done += 1 
+        if self.progress:
+            self.progress.update(comparisons_done)
+        if self.activity:
+            self.activity.update("Busy" if (on := comparisons_total > comparisons_done) else "Ready", on)
 
     def set_activity(self, w):
         self.activity = w
@@ -220,3 +240,6 @@ class ComparisonModel:
         self.progress = w
         self.reload_items()
         return w
+
+    def get(self, key):
+        return self.items_list_sources[key]
