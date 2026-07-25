@@ -70,18 +70,9 @@ class Prototype:
         """
         key = getattr(row, "index", None)
         if key and (addr := self.app.addresses.get(key)):
-            g.open_in_maps(addr.title, [(addr.latitude, addr.longitude)])
+            g.open_in_maps([(addr.latitude, addr.longitude, addr.title)])
         elif hasattr(row, "title") and hasattr(row, "latitude") and hasattr(row, "longitude"):
-            g.open_in_maps(row.title, [(row.latitude, row.longitude)])
-
-    def open_directions_in_maps(self, fro, to):
-        """
-        Opens the selected matching Service item from the List's directions from the Address in Apple Maps.
-
-        :param fro: DetailedList row item object of the Address
-        :param to: DetailedList row item object of the matching Service
-        """
-        g.open_in_maps(to.title, [(fro.latitude, fro.longitude), (to.latitude, to.longitude)], to.subtitle[len("By ")] if to.subtitle.startswith("By ") else None)
+            g.open_in_maps([(row.latitude, row.longitude, row.title)])
 
     def add_address(self, text: str = None, url: str = None):
         """
@@ -250,6 +241,15 @@ class Prototype:
             def set_value(self, k: str, v):
                 """Sets an attribute value on the address object."""
                 setattr(self.values, k, v)
+                
+            def open_directions_in_maps(self, fro, to):
+                """
+                Opens the selected matching Service item from the List's directions from the Address in Apple Maps.
+
+                :param fro: DetailedList row item object of the Address
+                :param to: DetailedList row item object of the matching Service
+                """
+                g.open_in_maps([(fro.latitude, fro.longitude, fro.title), (to.latitude, to.longitude, to.title)], to.subtitle[len("By ")] if to.subtitle.startswith("By ") else None)
 
         class EditServiceBox(toga.Box):
             """

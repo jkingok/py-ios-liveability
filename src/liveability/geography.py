@@ -10,37 +10,42 @@ from rubicon.objc.runtime import objc_id
 
 from . import bridge as b
 
-def open_in_maps(title: str, coords: list[tuple[float, float]], mode=None) -> bool:
+def open_in_maps(items: list[tuple[float, float, str]], mode=None) -> bool:
     """
     Creates an Objective-C MKMapItem from geographic coordinates, title, and address string,
     and opens it in Apple Maps via MapKit.
 
-    :param title: Location title or name.
-    :type title: str
-    :param coords: Location(s) in latitude and longitude in decimal degrees.
-    :type coords: list[tuple[float, float]]
+    :param items: Location(s) in latitude and longitude in decimal degrees then string title
+    :type items: list[tuple[float, float, str]]
     :param mode: Mode of transportation if directions (pair of items)
     :returns: True if MapKit accepted the launch request.
     :rtype: bool
     """
-    mi = b.MKMapItem.alloc()
-        .initWithLocation(b.CLLocation.alloc().initWithLatitude(coords[0][0], longitude=coords[0][1]), address=None)
-    mi.title = title
+    def MKMapItemMake(latitude, longitude, name):
+        mi = b.MKMapItem.alloc().initWithLocation(b.CLLocation.alloc().initWithLatitude(latitude, longitude=longitude), address=None)
+        mi.name = name
+        return mi
     lo = {}
-    if len(coords) == 2 and mode:
-        k = b.constant("MKLaunchOptionsDirectionsModeKey")
-        v = b.constant("MKLaunchOptionsDirectionsModeDefault")
-        match mode:
-            case '🚗':
-                v = b.constant("MKLaunchOptionsDirectionsModeDriving")
-            case '🚌':
-                v = b.constant("MKLaunchOptionsDirectionsModeTransit")
-            case '🚲':
-                v = b.constant("MKLaunchOptionsDirectionsModeCycling")
-            case '🥾':
-                v = b.constant("MKLaunchOptionsDirectionsModeWalking")
-        lo[k] = v
-    return mi.openInMapsWithItems([ b.MKMapItem.alloc().initWithLocation(b.CLLocation.alloc().initWithLatitude(c[0], longitude=c[1]), address=None) for c in coords ], launchOptions=lo)
+    match len(items):
+        case 0:
+            return False
+        case 1:
+            mi = MKMapItemMake(*items[0])
+            return mi.openInMapsWithLaunchOptions(lo)
+        case 2: 
+            k = str(b.constant("MKLaunchOptionsDirectionsModeKey"))
+            v = b.constant("MKLaunchOptionsDirectionsModeDefault") 
+            match mode:
+                case '🚗':
+                    v = b.constant("MKLaunchOptionsDirectionsModeDriving")
+                case '🚌':
+                    v = b.constant("MKLaunchOptionsDirectionsModeTransit")
+                case '🚲':
+                    v = b.constant("MKLaunchOptionsDirectionsModeCycling")
+                case '🥾':
+                    v = b.constant("MKLaunchOptionsDirectionsModeWalking")
+            lo[k] = v
+    return b.MKMapItem.openMapsWithItems([ MKMapItemMake(*item) for item in items ], launchOptions=lo)
 
 def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
     """
