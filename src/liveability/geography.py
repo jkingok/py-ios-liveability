@@ -27,7 +27,8 @@ def open_in_maps(title: str, latitude: float, longitude: float, address: str = N
     :rtype: bool
     """
     c = b.CLLocation.alloc().initWithLatitude(latitude, longitude=longitude)
-    map_item = b.MKMapItem.alloc().initWithLocation(c, address=address)
+    # TODO If we were to need the address we must use MKAddress
+    map_item = b.MKMapItem.alloc().initWithLocation(c, address=None)
     map_item.name = title
     return map_item.openInMapsWithLaunchOptions(None)
 
