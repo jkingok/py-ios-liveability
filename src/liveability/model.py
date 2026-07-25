@@ -217,7 +217,7 @@ class ComparisonModel:
             # Check if the comparison exists
             if a.title not in self.items_list_sources:
                 self.items_list_sources[a.title] = ListSource(
-                    accessors=["title", "subtitle", "icon", "index"],
+                    accessors=["title", "subtitle", "icon", "index", "latitude", "longitude", "symbol"],
                     data=[]
                 )
             if not self.items_list_sources[a.title].find({"title": s.title }, default=None) and (a.title, s.title) not in self.queue:
@@ -237,7 +237,9 @@ class ComparisonModel:
                                         "title": s.title,
                                         "subtitle": str(result),
                                         "icon": None,
-                                        "index": f"{a[0].title} to {s.title}"
+                                        "index": f"{a[0].title} to {s.title}",
+                                        "latitude": t.location.coordinate.latitude,
+                                        "longitude": t.location.coordinate.longitude
                                     })
                                     self.queue.remove((a[0].title, s.title))
                                     self.done_one()

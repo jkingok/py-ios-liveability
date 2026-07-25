@@ -106,7 +106,7 @@ class Prototype:
 
 
     def get_content(self):
-        class EditAddressBox(toga.Box):
+        class ViewAddressBox(toga.Box):
             def __init__(self, stack=None, key=None, values=None, details=None):
                 self.key = key or dt.datetime.now().isoformat()
                 self.values = values or d.Address()
@@ -137,9 +137,10 @@ class Prototype:
                             } 
                         ),
                         toga.MapView(
+                            flex=1,
                             location=(ll := (self.values.latitude, self.values.longitude)),
                             zoom=15,
-                            pins=(toga.MapPin(ll, title="Address"),)
+                            pins=[toga.MapPin(ll, title="🏠"), *[toga.MapPin((v.latitude, v.longitude), title=v.title) for v in details if v.latitude and v.longitude]]
                         ),
                         toga.DetailedList(
                             flex=1,
@@ -156,18 +157,16 @@ class Prototype:
                                 toga.Button(
                                     "Back",
                                     flex=1,
-                                    on_press=lambda w: {
-                                        self.app.widgets[self.stack].pop()
-                                    } 
+                                    on_press=lambda w: self.app.widgets[self.stack].pop()
                                 ),
-                                toga.Button(
-                                    "Save",
-                                    flex=1,
-                                    on_press=lambda w: (
-                                        self.app.addresses.save(self.key, self.values),
-                                        self.app.widgets[self.stack].pop()
-                                    )
-                                )
+                                #toga.Button(
+                                #    "Save",
+                                #    flex=1,
+                                #    on_press=lambda w: (
+                                #        self.app.addresses.save(self.key, self.values),
+                                #        self.app.widgets[self.stack].pop()
+                                #    )
+                                #)
                             ]
                         )  
                     ],
@@ -263,7 +262,7 @@ class Prototype:
                             on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
                             secondary_action="Delete",
                             on_secondary_action=lambda w, row: self.app.addresses.delete(row.index),
-                            on_select=lambda w: self.app.widgets["stack_list"].push(EditAddressBox("stack_list", i := w.selection.index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
+                            on_select=lambda w: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := w.selection.index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
                             data=self.app.addresses.items_list_source
                         ),
                         self.app.addresses.set_map(toga.MapView(
