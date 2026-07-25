@@ -1,14 +1,36 @@
 """
-MapKit spatial search and directions ETA calculation module.
+MapKit spatial search, directions ETA calculation, and map launch module.
 
-Performs asynchronous spatial queries via Apple MapKit (`MKLocalSearch`) and calculates
-travel time estimates (`MKDirectionsRequest`) across walking, cycling, transit, and driving modes.
+Performs asynchronous spatial queries via Apple MapKit (`MKLocalSearch`), calculates
+travel time estimates (`MKDirectionsRequest`), and launches target locations in Apple Maps (`MKMapItem`).
 """
 
 from rubicon.objc import Block, ObjCClass, ObjCInstance
 from rubicon.objc.runtime import objc_id
 
 from . import bridge as b
+
+def open_in_maps(title: str, latitude: float, longitude: float, address: str = None) -> bool:
+    """
+    Creates an Objective-C MKMapItem from geographic coordinates, title, and address string,
+    and opens it in Apple Maps via MapKit.
+
+    :param title: Location title or name.
+    :type title: str
+    :param latitude: Geographic latitude in decimal degrees.
+    :type latitude: float
+    :param longitude: Geographic longitude in decimal degrees.
+    :type longitude: float
+    :param address: Formatted address string.
+    :type address: str | None
+    :returns: True if MapKit accepted the launch request.
+    :rtype: bool
+    """
+    c = b.CLLocation.alloc().initWithLatitude(latitude, longitude=longitude)
+    map_item = b.MKMapItem.alloc().initWithLocation(c, address=address)
+    map_item.name = title
+    return map_item.openInMapsWithLaunchOptions(None)
+
 
 def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
     """

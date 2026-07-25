@@ -22,6 +22,7 @@ import urllib
 from . import bridge as b
 from . import data as d
 from . import functions as f
+from . import geography as g
 from . import model as m
 from . import settings as s
 from . import widgets as ws
@@ -60,6 +61,18 @@ class Prototype:
         :type name: str
         """
         await self.app.main_window.dialog(toga.InfoDialog("TODO", name))
+
+    def open_address_in_maps(self, row):
+        """
+        Opens the selected Address item from the List in Apple Maps.
+
+        :param row: DetailedList row item object containing `.index` or address properties.
+        """
+        key = getattr(row, "index", None)
+        if key and (addr := self.app.addresses.get(key)):
+            g.open_in_maps(addr.title, addr.latitude, addr.longitude, addr.subtitle)
+        elif hasattr(row, "title") and hasattr(row, "latitude") and hasattr(row, "longitude"):
+            g.open_in_maps(row.title, row.latitude, row.longitude, getattr(row, "subtitle", None))
 
     def add_address(self, text: str = None, url: str = None):
         """
@@ -309,7 +322,7 @@ class Prototype:
                                 self.app.addresses.reload_items()
                             },
                             primary_action="View",
-                            on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
+                            on_primary_action=lambda w, row: self.open_address_in_maps(row),
                             secondary_action="Delete",
                             on_secondary_action=lambda w, row: self.app.addresses.delete(row.index),
                             on_select=lambda w: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := w.selection.index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
