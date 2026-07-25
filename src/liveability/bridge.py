@@ -10,6 +10,9 @@ from rubicon.objc import ObjCClass, ObjCInstance, Block
 from rubicon.objc.runtime import load_library, objc_id
 from rubicon.objc.types import ctype_for_encoding
 
+def constant(name):
+    return ctypes.c_void_p.in_dll(ctypes.CDLL(None), name)
+
 #: C-struct representation for 2D geographic coordinates (`{CLLocationCoordinate2D=dd}`).
 CLLocationCoordinate2D = ctype_for_encoding(b'{CLLocationCoordinate2D=dd}')
 

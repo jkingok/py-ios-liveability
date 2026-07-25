@@ -70,9 +70,18 @@ class Prototype:
         """
         key = getattr(row, "index", None)
         if key and (addr := self.app.addresses.get(key)):
-            g.open_in_maps(addr.title, addr.latitude, addr.longitude, addr.subtitle)
+            g.open_in_maps(addr.title, [(addr.latitude, addr.longitude)])
         elif hasattr(row, "title") and hasattr(row, "latitude") and hasattr(row, "longitude"):
-            g.open_in_maps(row.title, row.latitude, row.longitude, getattr(row, "subtitle", None))
+            g.open_in_maps(row.title, [(row.latitude, row.longitude)])
+
+    def open_directions_in_maps(self, fro, to):
+        """
+        Opens the selected matching Service item from the List's directions from the Address in Apple Maps.
+
+        :param fro: DetailedList row item object of the Address
+        :param to: DetailedList row item object of the matching Service
+        """
+        g.open_in_maps(to.title, [(fro.latitude, fro.longitude), (to.latitude, to.longitude)], to.subtitle[len("By ")] if to.subtitle.startswith("By ") else None)
 
     def add_address(self, text: str = None, url: str = None):
         """
@@ -211,6 +220,7 @@ class Prototype:
                             }
                         ),
                         toga.MapView(
+                            id="view_address_box_map",
                             flex=1,
                             location=(ll := (self.values.latitude, self.values.longitude)),
                             zoom=15,
@@ -219,7 +229,8 @@ class Prototype:
                         toga.DetailedList(
                             flex=1,
                             primary_action="View",
-                            on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
+                            on_primary_action=lambda w, row: self.open_directions_in_maps(self.values, row),
+                            on_select=lambda w: setattr(self.app.widgets["view_address_box_map"], "location", (w.selection.latitude, w.selection.longitude)),
                             data=details
                         ),
                         toga.Row(

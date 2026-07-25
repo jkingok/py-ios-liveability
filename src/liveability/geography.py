@@ -10,28 +10,37 @@ from rubicon.objc.runtime import objc_id
 
 from . import bridge as b
 
-def open_in_maps(title: str, latitude: float, longitude: float, address: str = None) -> bool:
+def open_in_maps(title: str, coords: list[tuple[float, float]], mode=None) -> bool:
     """
     Creates an Objective-C MKMapItem from geographic coordinates, title, and address string,
     and opens it in Apple Maps via MapKit.
 
     :param title: Location title or name.
     :type title: str
-    :param latitude: Geographic latitude in decimal degrees.
-    :type latitude: float
-    :param longitude: Geographic longitude in decimal degrees.
-    :type longitude: float
-    :param address: Formatted address string.
-    :type address: str | None
+    :param coords: Location(s) in latitude and longitude in decimal degrees.
+    :type coords: list[tuple[float, float]]
+    :param mode: Mode of transportation if directions (pair of items)
     :returns: True if MapKit accepted the launch request.
     :rtype: bool
     """
-    c = b.CLLocation.alloc().initWithLatitude(latitude, longitude=longitude)
-    # TODO If we were to need the address we must use MKAddress
-    map_item = b.MKMapItem.alloc().initWithLocation(c, address=None)
-    map_item.name = title
-    return map_item.openInMapsWithLaunchOptions(None)
-
+    mi = b.MKMapItem.alloc()
+        .initWithLocation(b.CLLocation.alloc().initWithLatitude(coords[0][0], longitude=coords[0][1]), address=None)
+    mi.title = title
+    lo = {}
+    if len(coords) == 2 and mode:
+        k = b.constant("MKLaunchOptionsDirectionsModeKey")
+        v = b.constant("MKLaunchOptionsDirectionsModeDefault")
+        match mode:
+            case '🚗':
+                v = b.constant("MKLaunchOptionsDirectionsModeDriving")
+            case '🚌':
+                v = b.constant("MKLaunchOptionsDirectionsModeTransit")
+            case '🚲':
+                v = b.constant("MKLaunchOptionsDirectionsModeCycling")
+            case '🥾':
+                v = b.constant("MKLaunchOptionsDirectionsModeWalking")
+        lo[k] = v
+    return mi.openInMapsWithItems([ b.MKMapItem.alloc().initWithLocation(b.CLLocation.alloc().initWithLatitude(c[0], longitude=c[1]), address=None) for c in coords ], launchOptions=lo)
 
 def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
     """
