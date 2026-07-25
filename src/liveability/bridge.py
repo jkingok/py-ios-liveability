@@ -35,10 +35,21 @@ MKCoordinateRegionMakeWithDistance.argtypes = [
 # Define the return type (the struct we defined above)
 MKCoordinateRegionMakeWithDistance.restype = MKCoordinateRegion
 
+MKDirections = ObjCClass('MKDirections')
+
+MKDirectionsRequest = ObjCClass('MKDirectionsRequest')
+
+MKDistanceFormatter = ObjCClass('MKDistanceFormatter')
+
 MKGeocodingRequest = ObjCClass('MKGeocodingRequest')
+
+MKLocalSearchRequest = ObjCClass('MKLocalSearchRequest')
+MKLocalSearch = ObjCClass('MKLocalSearch')
 
 MKMapItem = ObjCClass('MKMapItem')
 
 MKReverseGeocodingRequest = ObjCClass('MKReverseGeocodingRequest')
+
+NSDateComponentsFormatter = ObjCClass('NSDateComponentsFormatter')
 
 UIPasteboard = ObjCClass('UIPasteboard')

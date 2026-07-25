@@ -1,10 +1,12 @@
 import datetime as dt
 from itertools import product
 from pathlib import Path
+from rubicon.objc import ObjCClass
 import toga
 from toga.sources import ListSource
 
 from . import data as d
+from . import geography as g
 
 class AddressModel:
     _instance = None
@@ -196,6 +198,7 @@ class ComparisonModel:
         self.progress = None 
         self.comparisons = {}
         self.busy = False
+        self.queue = set()
         self.reload_items()
         AddressModel._instance.register(self.reload_items)
         ServiceModel._instance.register(self.reload_items)
@@ -217,15 +220,48 @@ class ComparisonModel:
                     accessors=["title", "subtitle", "icon", "index"],
                     data=[]
                 )
-            if not self.items_list_sources[a.title].find({"title": s.title }, default=None):
+            if not self.items_list_sources[a.title].find({"title": s.title }, default=None) and (a.title, s.title) not in self.queue:
                 print(f"TODO {a.title} to {s.title}")
-                self.items_list_sources[a.title].append({
-                    "title": s.title,
-                    "subtitle": "TODO",
-                    "icon": None,
-                    "index": f"{a.title} to {s.title}"
-                })
-            comparisons_done += 1 
+                # Schedule routing
+                self.queue.add((a.title, s.title))
+                a2 = AddressModel._instance.get(a.index)
+                def step1(result, value, a, s):
+                    if isinstance(value, ObjCClass('MKMapItem')):
+                        # Continue with ETA
+                        def step2(result, value, a, s, t, m):
+                            if isinstance(value, ObjCClass('MKETAResponse')):
+                                if value.expectedTravelTime >= 11*60 and m != '🚗':
+                                    g.perform_eta((a[1].latitude, a[1].longitude), t, '🚗', lambda r, v, a=a, s=s, t=t, m='🚗': step2(r, v, a, s, t, m))
+                                else:
+                                    self.items_list_sources[a[0].title].append({
+                                        "title": s.title,
+                                        "subtitle": str(result),
+                                        "icon": None,
+                                        "index": f"{a[0].title} to {s.title}"
+                                    })
+                                    self.queue.remove((a[0].title, s.title))
+                                    self.done_one()
+                            else:
+                                self.items_list_sources[a[0].title].append({
+                                    "title": s.title,
+                                    "subtitle": "⚠️ "+str(result),
+                                    "icon": None,
+                                    "index": f"{a[0].title} to {s.title}"
+                                })
+                                self.queue.remove((a[0].title, s.title))
+                                self.done_one()
+                        g.perform_eta((a[1].latitude, a[1].longitude), value, '🥾', lambda r, v, a=a, s=s, t=value, m='🥾': step2(r, v, a, s, t, m))
+                    else:
+                        self.items_list_sources[a[0].title].append({
+                            "title": s.title,
+                            "subtitle": "⚠️ "+str(result),
+                            "icon": None,
+                            "index": f"{a[0].title} to {s.title}"
+                        })
+                        self.queue.remove((a[0].title, s.title))
+                        self.done_one()
+                g.perform_search_at(s.title, a2.latitude, a2.longitude,
+                    lambda r, o=None, a=(a, a2), s=s: step1(r, o, a, s))
         if self.progress:
             self.progress.update(comparisons_done)
         if self.activity:
@@ -240,6 +276,12 @@ class ComparisonModel:
         self.progress = w
         self.reload_items()
         return w
+
+    def done_one(self):
+        if self.progress:
+            self.progress.increment()
+        if self.activity:
+            self.activity.update("Ready" if (off := self.progress.is_done()) else "Busy", not off)
 
     def get(self, key):
         return self.items_list_sources[key]

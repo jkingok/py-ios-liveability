@@ -1,0 +1,76 @@
+from rubicon.objc import Block, ObjCClass, ObjCInstance
+from rubicon.objc.runtime import objc_id
+
+from . import bridge as b
+
+def perform_search_at(search_string, latitude, longitude, callback):
+    # 1. Set up the request
+    request = b.MKLocalSearchRequest.alloc().init()
+    request.naturalLanguageQuery = search_string
+
+    request.region = b.MKCoordinateRegionMakeWithDistance(b.CLLocationCoordinate2DMake(latitude, longitude), 10000.0, 10000.0)
+
+    # 2. Define the target callback function
+    def search_callback(response_ptr: objc_id, error_ptr: objc_id) -> None:
+        if error_ptr:
+            error = ObjCInstance(error_ptr)
+            callback(f"Search failed: {error.localizedDescription}", error)
+        else:
+            response = ObjCInstance(response_ptr)
+            mapItems = list(response.mapItems)
+            if len(mapItems) > 0:
+                print(f"Found {len(mapItems)} result(s):")
+
+                # Loop through native search results
+                for item in mapItems:
+                    print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)}")
+                callback(mapItems[0].name, mapItems[0])
+
+    # 3. Initialize the search and kick it off
+    b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(Block(search_callback, None, objc_id, objc_id))
+    
+# New priority-based algorithm:
+# Performs less calculations
+# Logic applies a maximum time limit
+# First search for the walking ETA
+# If it is within limit, stop
+# Else calculate cycling ETA
+# Else calculate driving ETA
+# Defer calculating routes until requested for details
+
+def perform_eta(fro, to, mode, callback):
+    # Initialize Formatters for elegant localise-aware outputs
+    dist_formatter = b.MKDistanceFormatter.alloc().init()
+    dist_formatter.unitsStyle = 1 # Abbreviated (e.g., "km", "m")
+    
+    time_formatter = b.NSDateComponentsFormatter.alloc().init()
+    time_formatter.unitsStyle = 1 # Abbreviated (e.g., "hr", "min")
+    time_formatter.allowedUnits = (1 << 5) | (1 << 6) # Hour | Minute
+    
+    # Start with a walking route
+    mode_nums = { '🥾': 2, '🚗': 1 }
+    request = b.MKDirectionsRequest.alloc().init()
+    if not isinstance(fro, ObjCClass('MKMapItem')):
+        c = b.CLLocation.alloc().initWithLatitude(fro[0], longitude=fro[1])
+        request.source = b.MKMapItem.alloc().initWithLocation(c, address=None)
+    else: 
+        request.source = fro
+    request.destination = to
+    request.transportType = mode_nums[mode] # 1 = Driving, 2 = Walking
+    request.requestsAlternateRoutes = False
+
+    directions_calculator = b.MKDirections.alloc().initWithRequest(request)
+        
+    # Define the Objective-C completion block wrapper
+    def completion_handler(response_id, error_id):
+        if error_id:
+            error = ObjCInstance(error)
+            callback(f"Directions failed: {error.localizedDescription}")
+        elif response_id:
+            response = ObjCInstance(response_id)
+            minutes = (int(response.expectedTravelTime / 60), str(time_formatter.stringFromTimeInterval(response.expectedTravelTime)))
+            metres = (int(response.distance / 1000), str(dist_formatter.stringFromDistance(response.distance)))
+            callback(f"By {mode} in {minutes[1]} and {metres[1]}", response)
+
+    # Call Apple servers asynchronously
+    directions_calculator.calculateETAWithCompletionHandler(Block(lambda r, e: completion_handler(r, e), None, objc_id, objc_id))

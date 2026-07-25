@@ -115,10 +115,16 @@ class LabelledProgress(toga.Box):
             self.text.text = "" 
         self.bar.value = value
   
+    def increment(self, step=1):
+        self.update(self.bar.value + step)
+  
     def stop(self):
         if self.bar.max:
             self.update(self.bar.max)
-        self.bar.stop() 
+        self.bar.stop()
+
+    def is_done(self):
+        return self.bar.value >= self.bar.max
 
 class LabelledActivity(toga.Box):
     def __init__(self, **kwargs):
