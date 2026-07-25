@@ -1,9 +1,28 @@
+"""
+MapKit spatial search and directions ETA calculation module.
+
+Performs asynchronous spatial queries via Apple MapKit (`MKLocalSearch`) and calculates
+travel time estimates (`MKDirectionsRequest`) across walking, cycling, transit, and driving modes.
+"""
+
 from rubicon.objc import Block, ObjCClass, ObjCInstance
 from rubicon.objc.runtime import objc_id
 
 from . import bridge as b
 
-def perform_search_at(search_string, latitude, longitude, callback):
+def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
+    """
+    Executes an asynchronous MapKit local search around specified coordinates.
+
+    :param search_string: Natural language query (e.g., 'Supermarket', 'Park').
+    :type search_string: str
+    :param latitude: Center latitude for search region in decimal degrees.
+    :type latitude: float
+    :param longitude: Center longitude for search region in decimal degrees.
+    :type longitude: float
+    :param callback: Function invoked with `(result_title, map_item)` upon search completion.
+    :type callback: callable
+    """
     # 1. Set up the request
     request = b.MKLocalSearchRequest.alloc().init()
     request.naturalLanguageQuery = search_string
@@ -28,43 +47,47 @@ def perform_search_at(search_string, latitude, longitude, callback):
 
     # 3. Initialize the search and kick it off
     b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(Block(search_callback, None, objc_id, objc_id))
-    
-# New priority-based algorithm:
-# Performs less calculations
-# Logic applies a maximum time limit
-# First search for the walking ETA
-# If it is within limit, stop
-# Else calculate cycling ETA
-# Else calculate driving ETA
-# Defer calculating routes until requested for details
 
-def perform_eta(fro, to, mode, callback):
+
+def perform_eta(fro, to, mode: str, callback) -> None:
+    """
+    Calculates estimated travel time and distance between two points using Apple MapKit directions.
+
+    :param fro: Origin point as `(latitude, longitude)` tuple or native Objective-C `MKMapItem`.
+    :type fro: tuple[float, float] | ObjCClass('MKMapItem')
+    :param to: Destination point as native `MKMapItem`.
+    :type to: ObjCClass('MKMapItem')
+    :param mode: Transport mode emoji ('🥾' for walking, '🚲' for cycling, '🚌' for transit, '🚗' for driving).
+    :type mode: str
+    :param callback: Function invoked with `(formatted_string, eta_response)` upon completion.
+    :type callback: callable
+    """
     # Initialize Formatters for elegant localise-aware outputs
     dist_formatter = b.MKDistanceFormatter.alloc().init()
-    dist_formatter.unitsStyle = 1 # Abbreviated (e.g., "km", "m")
-    
+    dist_formatter.unitsStyle = 1  # Abbreviated (e.g., "km", "m")
+
     time_formatter = b.NSDateComponentsFormatter.alloc().init()
-    time_formatter.unitsStyle = 1 # Abbreviated (e.g., "hr", "min")
-    time_formatter.allowedUnits = (1 << 5) | (1 << 6) # Hour | Minute
-    
+    time_formatter.unitsStyle = 1  # Abbreviated (e.g., "hr", "min")
+    time_formatter.allowedUnits = (1 << 5) | (1 << 6)  # Hour | Minute
+
     # Start with a walking route
-    mode_nums = { '🚲': 8, '🚌': 4, '🥾': 2, '🚗': 1 }
+    mode_nums = {'🚲': 8, '🚌': 4, '🥾': 2, '🚗': 1}
     request = b.MKDirectionsRequest.alloc().init()
     if not isinstance(fro, ObjCClass('MKMapItem')):
         c = b.CLLocation.alloc().initWithLatitude(fro[0], longitude=fro[1])
         request.source = b.MKMapItem.alloc().initWithLocation(c, address=None)
-    else: 
+    else:
         request.source = fro
     request.destination = to
-    request.transportType = mode_nums[mode] # 1 = Driving, 2 = Walking
+    request.transportType = mode_nums[mode]  # 1 = Driving, 2 = Walking
     request.requestsAlternateRoutes = False
 
     directions_calculator = b.MKDirections.alloc().initWithRequest(request)
-        
+
     # Define the Objective-C completion block wrapper
     def completion_handler(response_id, error_id):
         if error_id:
-            error = ObjCInstance(error)
+            error = ObjCInstance(error_id)
             callback(f"Directions failed: {error.localizedDescription}")
         elif response_id:
             response = ObjCInstance(response_id)

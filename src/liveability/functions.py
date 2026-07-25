@@ -1,3 +1,9 @@
+"""
+SQLite database persistence layer for the Liveability application.
+
+Provides schema creation, migration tracking, and CRUD operations for addresses and services.
+"""
+
 import base64
 import collections
 import csv
@@ -18,19 +24,23 @@ from . import data as d
 DB_NAME = "liveability.db"
 
 class Functions:
+    """
+    Singleton data access manager performing SQLite operations.
+
+    :param paths: Toga application paths provider containing `.data` and `.cache`.
+    :type paths: toga.paths.Paths
+    :param settings: Application settings manager instance.
+    :type settings: liveability.settings.Settings
+    """
     _instance = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            # Create the single instance and cache it on the class
             cls._instance = super().__new__(cls)
-            # Initialize flags or containers that only ever happen ONCE
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self, paths, settings):
-        # __init__ runs EVERY time you call,
-        # so guard it to ensure it only initializes once.
         if self._initialized:
             return
         self.settings = settings
@@ -45,6 +55,9 @@ class Functions:
         self._initialized = True
 
     def init_db(self) -> None:
+        """
+        Initializes the SQLite database schema and schema version tracking tables.
+        """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS schema_versions (
@@ -52,14 +65,12 @@ class Functions:
                     version INTEGER
                 ) STRICT
             """)
- 
+
             cursor = conn.execute("""
                 SELECT version FROM schema_versions WHERE name = 'address'
             """)
-            # Schema updates
-            v = r[0] if (r := cursor.fetchone()) else 0 
-            # TODO Alter columns smoothly if table already exists
-            conn.executescript(""" 
+            v = r[0] if (r := cursor.fetchone()) else 0
+            conn.executescript("""
                 CREATE TABLE IF NOT EXISTS address (
                     identifier TEXT PRIMARY KEY,
                     title TEXT,
@@ -69,14 +80,12 @@ class Functions:
                 ) STRICT;
                 UPDATE schema_versions SET version = 1 WHERE name = 'address'
             """)
-            
+
             cursor = conn.execute("""
                 SELECT version FROM schema_versions WHERE name = 'service'
             """)
-            # Schema updates
-            v = r[0] if (r := cursor.fetchone()) else 0 
-            # TODO Alter columns smoothly if table already exists
-            conn.executescript(""" 
+            v = r[0] if (r := cursor.fetchone()) else 0
+            conn.executescript("""
                 CREATE TABLE IF NOT EXISTS service (
                     identifier TEXT PRIMARY KEY,
                     name TEXT,
@@ -84,10 +93,18 @@ class Functions:
                 ) STRICT;
                 UPDATE schema_versions SET version = 1 WHERE name = 'service'
             """)
- 
+
         print("Database ready.")
 
     def get_address_by_id(self, query_identifier: str) -> d.Address | None:
+        """
+        Retrieves an address record by unique identifier.
+
+        :param query_identifier: Address record primary key.
+        :type query_identifier: str
+        :returns: Address dataclass or None if not found.
+        :rtype: d.Address | None
+        """
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute(
                 "SELECT title, subtitle, latitude, longitude FROM address WHERE identifier = ?",
@@ -97,15 +114,27 @@ class Functions:
         return d.Address(*row) if row else None
 
     def save_address(self, query_identifier: str, a: d.Address) -> None:
+        """
+        Inserts or updates an address record in the database.
+
+        :param query_identifier: Address record primary key.
+        :type query_identifier: str
+        :param a: Address object containing properties to save.
+        :type a: d.Address
+        """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO address VALUES (?, ?, ?, ?, ?)",
-                (query_identifier,  a.title, a.subtitle, a.latitude, a.longitude)
+                (query_identifier, a.title, a.subtitle, a.latitude, a.longitude)
             )
 
     def delete_address(self, query_identifier: str) -> None:
-        """Deletes an address from the database by its query_identifier."""
-        # Normalise the key exactly how it was saved
+        """
+        Deletes an address record from the database by identifier.
+
+        :param query_identifier: Address record primary key.
+        :type query_identifier: str
+        """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
                 "DELETE FROM address WHERE identifier = ?",
@@ -113,6 +142,12 @@ class Functions:
             )
 
     def map_addresses(self) -> dict[str, d.Address]:
+        """
+        Retrieves all address records as a dictionary mapping identifier to Address object.
+
+        :returns: Dictionary of address records.
+        :rtype: dict[str, d.Address]
+        """
         cache = {}
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute("SELECT identifier, title, subtitle, latitude, longitude FROM address")
@@ -121,14 +156,28 @@ class Functions:
         return cache
 
     def load_addresses(self) -> list[d.Address]:
+        """
+        Retrieves all address records as a list of Address objects.
+
+        :returns: List of saved addresses.
+        :rtype: list[d.Address]
+        """
         cache = []
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute("SELECT title, subtitle, latitude, longitude FROM address")
-            for row in cursor.fetchall(): 
+            for row in cursor.fetchall():
                 cache.append(d.Address(*row))
         return cache
- 
+
     def get_service_by_id(self, query_identifier: str) -> d.Service | None:
+        """
+        Retrieves a service record by unique identifier.
+
+        :param query_identifier: Service record primary key.
+        :type query_identifier: str
+        :returns: Service dataclass or None if not found.
+        :rtype: d.Service | None
+        """
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute(
                 "SELECT name, emoji FROM service WHERE identifier = ?",
@@ -138,15 +187,27 @@ class Functions:
         return d.Service(*row) if row else None
 
     def save_service(self, query_identifier: str, a: d.Service) -> None:
+        """
+        Inserts or updates a service record in the database.
+
+        :param query_identifier: Service record primary key.
+        :type query_identifier: str
+        :param a: Service object containing properties to save.
+        :type a: d.Service
+        """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO service VALUES (?, ?, ?)",
-                (query_identifier,  a.name, a.emoji)
+                (query_identifier, a.name, a.emoji)
             )
 
     def delete_service(self, query_identifier: str) -> None:
-        """Deletes an service from the database by its query_identifier."""
-        # Normalise the key exactly how it was saved
+        """
+        Deletes a service record from the database by identifier.
+
+        :param query_identifier: Service record primary key.
+        :type query_identifier: str
+        """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
                 "DELETE FROM service WHERE identifier = ?",
@@ -154,6 +215,12 @@ class Functions:
             )
 
     def map_services(self) -> dict[str, d.Service]:
+        """
+        Retrieves all service records as a dictionary mapping identifier to Service object.
+
+        :returns: Dictionary of service records.
+        :rtype: dict[str, d.Service]
+        """
         cache = {}
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute("SELECT identifier, name, emoji FROM service")
@@ -162,9 +229,15 @@ class Functions:
         return cache
 
     def load_services(self) -> list[d.Service]:
+        """
+        Retrieves all service records as a list of Service objects.
+
+        :returns: List of saved services.
+        :rtype: list[d.Service]
+        """
         cache = []
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute("SELECT name, emoji FROM service")
-            for row in cursor.fetchall(): 
+            for row in cursor.fetchall():
                 cache.append(d.Service(*row))
         return cache

@@ -1,9 +1,28 @@
+"""
+Custom Toga UI widgets and native platform utility integration.
+
+Provides compound labelled input widgets (`LabelledDate`, `LabelledNumber`, `LabelledSelection`,
+`LabelledText`, `LabelledProgress`, `LabelledActivity`), navigation `StackContainer`, and native iOS
+dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via `IOSUtils`).
+"""
+
 import asyncio
 from pathlib import Path
 import toga
 
 class LabelledDate(toga.Box):
-    def __init__(self, label_text, value_text=None, callback=None, id=None):
+    """
+    Toga Box combining a text Label and DateInput widget.
+
+    :param label_text: Text displayed on the label prefix.
+    :type label_text: str
+    :param value_text: Initial date value.
+    :param callback: Event handler callback for date change.
+    :type callback: callable
+    :param id: Widget identifier.
+    :type id: str
+    """
+    def __init__(self, label_text: str, value_text=None, callback=None, id=None):
         super().__init__(
             direction="row",
             align_items="center",
@@ -20,8 +39,23 @@ class LabelledDate(toga.Box):
             ]
         )
 
+
 class LabelledNumber(toga.Box):
-    def __init__(self, label_text, value_num=0, callback=None, readonly=False, id=None):
+    """
+    Toga Box combining a text Label and NumberInput widget.
+
+    :param label_text: Label text prefix.
+    :type label_text: str
+    :param value_num: Initial numeric value.
+    :type value_num: int | float
+    :param callback: Event handler callback for change.
+    :type callback: callable
+    :param readonly: True to set input field read-only.
+    :type readonly: bool
+    :param id: Widget identifier.
+    :type id: str
+    """
+    def __init__(self, label_text: str, value_num=0, callback=None, readonly: bool = False, id=None):
         super().__init__(
             direction="row",
             align_items="center",
@@ -39,8 +73,23 @@ class LabelledNumber(toga.Box):
             ]
         )
 
+
 class LabelledSelection(toga.Box):
-    def __init__(self, label_text, value_text="", value_list=[], callback=None, id=None):
+    """
+    Toga Box combining a text Label and Selection dropdown widget.
+
+    :param label_text: Label text prefix.
+    :type label_text: str
+    :param value_text: Initially selected item value.
+    :type value_text: str
+    :param value_list: List of available selection items.
+    :type value_list: list
+    :param callback: Change event callback handler.
+    :type callback: callable
+    :param id: Widget identifier.
+    :type id: str
+    """
+    def __init__(self, label_text: str, value_text="", value_list=[], callback=None, id=None):
         super().__init__(
             direction="row",
             align_items="center",
@@ -58,8 +107,27 @@ class LabelledSelection(toga.Box):
             ]
         )
 
+
 class LabelledText(toga.Box):
-    def __init__(self, label_text, value_text="", callback=None, confirm=None, readonly=False, multiline=False, id=None, **kwargs):
+    """
+    Toga Box combining a text Label and TextInput (or MultilineTextInput) widget.
+
+    :param label_text: Label text prefix.
+    :type label_text: str
+    :param value_text: Initial text string value.
+    :type value_text: str
+    :param callback: Text change event callback handler.
+    :type callback: callable
+    :param confirm: Enter key confirm event callback handler.
+    :type confirm: callable
+    :param readonly: True to set text input read-only.
+    :type readonly: bool
+    :param multiline: True to render a multiline text input.
+    :type multiline: bool
+    :param id: Widget identifier.
+    :type id: str
+    """
+    def __init__(self, label_text: str, value_text="", callback=None, confirm=None, readonly: bool = False, multiline: bool = False, id=None, **kwargs):
         super().__init__(
             direction="column" if multiline else "row",
             align_items="start" if multiline else "center",
@@ -83,10 +151,14 @@ class LabelledText(toga.Box):
                     readonly=readonly
                 )
             ],
-            **kwargs     
+            **kwargs
         )
 
+
 class LabelledProgress(toga.Box):
+    """
+    Toga Box combining a ProgressBar and progress text status Label.
+    """
     def __init__(self, **kwargs):
         self.bar = toga.ProgressBar(flex=1)
         self.text = toga.Label("")
@@ -100,33 +172,64 @@ class LabelledProgress(toga.Box):
             **kwargs
         )
 
-    def start(self, limit:int=0):
+    def start(self, limit: int = 0):
+        """
+        Starts the progress bar with a specified upper limit.
+
+        :param limit: Maximum progress target value.
+        :type limit: int
+        """
         self.bar.max = limit if limit > 0 else None
         self.bar.start()
         self.update(0)
 
-    def update(self, value:int):
+    def update(self, value: int):
+        """
+        Updates current progress value and updates status text label.
+
+        :param value: Current progress value.
+        :type value: int
+        """
         if self.bar.max:
             if self.bar.max == 100:
                 self.text.text = f"{int(value)}%"
             else:
                 self.text.text = f"{int(value)}/{int(self.bar.max)}"
         else:
-            self.text.text = "" 
+            self.text.text = ""
         self.bar.value = value
-  
-    def increment(self, step=1):
+
+    def increment(self, step: int = 1):
+        """
+        Increments progress by a step amount.
+
+        :param step: Step value to increment.
+        :type step: int
+        """
         self.update(self.bar.value + step)
-  
+
     def stop(self):
+        """
+        Stops progress animation and sets progress bar to maximum value.
+        """
         if self.bar.max:
             self.update(self.bar.max)
         self.bar.stop()
 
-    def is_done(self):
+    def is_done(self) -> bool:
+        """
+        Checks whether the progress bar has reached maximum limit.
+
+        :returns: True if progress is complete.
+        :rtype: bool
+        """
         return self.bar.value >= self.bar.max
 
+
 class LabelledActivity(toga.Box):
+    """
+    Toga Box combining an ActivityIndicator spinner and status text Label.
+    """
     def __init__(self, **kwargs):
         self.activity = toga.ActivityIndicator()
         self.text = toga.Label("", flex=1)
@@ -139,39 +242,77 @@ class LabelledActivity(toga.Box):
             **kwargs
         )
 
-    def update(self, value:str="", on:bool=True):
+    def update(self, value: str = "", on: bool = True):
+        """
+        Updates text label and starts or stops activity animation.
+
+        :param value: Status message text.
+        :type value: str
+        :param on: True to start activity spinner, False to stop.
+        :type on: bool
+        """
         self.activity.start() if on else self.activity.stop()
-        self.text.text=value
+        self.text.text = value
+
 
 class StackContainer(toga.Box):
-   def __init__(self, **kwargs):
-      super().__init__(**kwargs)
-      self.stack = []
-   
-   def push(self, new_children):
-      self.stack.append(list(self.children))
-      self.clear()
-      self.add(new_children)
+    """
+    Toga Box container supporting push/pop view navigation stack mechanics.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.stack = []
 
-   def pop(self):
-      if self.stack:
-         new_children = self.stack.pop()
-         self.clear()
-         self.add(*new_children)
+    def push(self, new_children):
+        """
+        Pushes current children onto stack and displays new child views.
+
+        :param new_children: Widget or list of widgets to display.
+        """
+        self.stack.append(list(self.children))
+        self.clear()
+        self.add(new_children)
+
+    def pop(self):
+        """
+        Pops and restores previous widget view hierarchy from stack.
+        """
+        if self.stack:
+            new_children = self.stack.pop()
+            self.clear()
+            self.add(*new_children)
+
 
 class GenericUtils:
-    def info_task(w, title, text):
+    """
+    Generic cross-platform utilities.
+    """
+    def info_task(w, title: str, text: str):
+        """
+        Displays an InfoDialog asynchronously.
+
+        :param w: Toga app host context.
+        :param title: Dialog title string.
+        :type title: str
+        :param text: Dialog message content.
+        :type text: str
+        """
         asyncio.create_task(w.app.main_window.dialog(toga.InfoDialog(title, text)))
 
+
 class PlatformUtils(GenericUtils):
+    """
+    Fallback implementation of platform-specific utilities for non-iOS platforms.
+    """
     def close_keyboard(widget):
         pass
 
-    def ask_for_input(w, title, message, actions, texts=0):
+    def ask_for_input(w, title: str, message: str, actions=[], texts: int = 0):
         pass
-  
-    def open_share_sheet(w, html_file_path):
+
+    def open_share_sheet(w, html_file_path: str):
         pass
+
 
 if toga.platform.current_platform == 'iOS':
     from rubicon.objc import ObjCClass, ObjCInstance
@@ -182,86 +323,88 @@ if toga.platform.current_platform == 'iOS':
     UIActivityViewController = ObjCClass('UIActivityViewController')
     UIAlertController = ObjCClass("UIAlertController")
     UIAlertAction = ObjCClass("UIAlertAction")
-    
+
     class IOSUtils(PlatformUtils):
+        """
+        Native iOS implementation of platform utilities using Objective-C UIKit calls via Rubicon-ObjC.
+        """
         def close_keyboard(widget):
-            """Triggered when the user presses 'Return' or 'Done' on the iPad keyboard."""
-            # Dismiss the keyboard by resigning First Responder status
+            """
+            Dismisses the soft keyboard by resigning first responder status on UIKit textfield.
+
+            :param widget: Native Toga text field widget.
+            """
             try:
-                # Check if we are running on iOS/iPadOS via the native implementation handle
                 if hasattr(widget, '_impl') and hasattr(widget._impl, 'native'):
                     native_textfield = widget._impl.native
-            
-                    # Fire the native UIKit selector to lower the keyboard
                     native_textfield.resignFirstResponder()
                     print("[UIKit] Keyboard dismissed via resignFirstResponder.")
             except Exception as e:
-                # Graceful fallback for macOS/Windows desktop development runners
                 print(f"[Platform Fallback] Could not reach native interface: {e}")
 
-        def ask_for_input(w, title, message, actions=[], texts=0):
-            # Preferred Styles: 0 = ActionSheet, 1 = Alert
-            # Text fields not allowed in Sheets
+        def ask_for_input(w, title: str, message: str, actions=[], texts: int = 0):
+            """
+            Presents a native iOS UIAlertController modal with action buttons and text input fields.
+
+            :param w: Toga host widget or app context.
+            :param title: Alert title string.
+            :type title: str
+            :param message: Alert description text.
+            :type message: str
+            :param actions: List of tuples `(button_title, callback_function)`.
+            :type actions: list
+            :param texts: Number of text input fields to attach.
+            :type texts: int
+            """
             alert = UIAlertController.alertControllerWithTitle(
                 title,
                 message=message,
                 preferredStyle=1
             )
 
-            # Add text input field
             for i in range(texts):
                 alert.addTextFieldWithConfigurationHandler_(None)
 
-            # Define action handler
-            handlers = { action[0]: action[1] for action in actions if len(action) > 1 and action[1] }
+            handlers = {action[0]: action[1] for action in actions if len(action) > 1 and action[1]}
+
             def on_done(action_ptr: ObjCInstance) -> None:
                 if (title := str(ObjCInstance(action_ptr).title)) in handlers:
-                    outputs = [ str(tf.text) for tf in alert.textFields ] 
+                    outputs = [str(tf.text) for tf in alert.textFields]
                     handlers[title](title, *outputs)
 
             for action in actions:
                 alert.addAction(UIAlertAction.actionWithTitle(action[0], style=0, handler=on_done))
 
-            # Present modally
             w.main_window._impl.native.rootViewController.presentViewController(alert, animated=True, completion=None)
 
         def open_share_sheet(w, html_file_path: str):
             """
-            Opens the iOS native share sheet for a specific HTML file.
-        
-            :param w: The active Toga widget instance initiating the share.
-            :param html_file_path: Absolute string path to the local HTML file.
+            Opens the iOS native UIActivityViewController share sheet for a target file.
+
+            :param w: Active Toga widget initiating the share operation.
+            :param html_file_path: File system path to the target file.
+            :type html_file_path: str
             """
-            # 1. Ensure the file path exists and convert it into a native file URL
             absolute_path = str(Path(html_file_path).resolve())
             file_url = NSURL.fileURLWithPath_(absolute_path)
-    
-            # 2. Add the URL asset into an Objective-C array of items to share
+
             share_items = NSMutableArray.alloc().init()
             share_items.addObject_(file_url)
-    
-            # 3. Initialize the native UIActivityViewController
-            # Pass None for custom applicationActivities to use standard system defaults
+
             activity_vc = UIActivityViewController.alloc().initWithActivityItems(
-                share_items, 
+                share_items,
                 applicationActivities=None
             )
-    
-            # 4. Grab the native UIViewController backing your Toga Window
+
             presenting_vc = w.app.main_window._impl.native.rootViewController
-    
-            # 5. Handle iPad popover configurations safely to prevent crashes
+
             if activity_vc.popoverPresentationController:
-                # Anchor the popover menu to the center or bounds of the current view frame
                 activity_vc.popoverPresentationController.sourceView = presenting_vc.view
                 activity_vc.popoverPresentationController.sourceRect = presenting_vc.view.bounds
-                # Optional: restrict arrow directions if needed
-                # activity_vc.popoverPresentationController.permittedArrowDirections = 0
-        
-            # 6. Present the share sheet asynchronously over the top of the interface
+
             presenting_vc.presentViewController(
-                activity_vc, 
-                animated=True, 
+                activity_vc,
+                animated=True,
                 completion=None
             )
 

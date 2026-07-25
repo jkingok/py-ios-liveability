@@ -1,23 +1,32 @@
+"""
+Application settings manager using TOML configuration files.
+
+Manages loading, persisting, and default template fallback for application options
+via pure-Python `tomlkit`.
+"""
+
 from pathlib import Path
 import shutil
 import tomlkit  # Pure-Python style-preserving library
 
-CONFIG_NAME="config.toml"
+CONFIG_NAME = "config.toml"
 
 class Settings:
+    """
+    Singleton class managing application configuration settings.
+
+    :param paths: Toga application paths provider containing `.config` path.
+    :type paths: toga.paths.Paths
+    """
     _instance = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            # Create the single instance and cache it on the class
             cls._instance = super().__new__(cls)
-            # Initialize flags or containers that only ever happen ONCE
             cls._instance._initialized = False
         return cls._instance
- 
+
     def __init__(self, paths):
-        # __init__ runs EVERY time you call, 
-        # so guard it to ensure it only initializes once.
         if self._initialized:
             return
         self.config_path = paths.config
@@ -29,18 +38,40 @@ class Settings:
         self._initialized = True
 
     def load(self):
+        """
+        Loads the TOML configuration document from disk.
+
+        If the configuration file does not exist, copies the default template first.
+        """
         if not self.config_file.exists():
             shutil.copy(self.config_defaults, self.config_file)
         with open(self.config_file, "r", encoding="utf-8") as f:
             self.config_doc = tomlkit.load(f)
 
     def save(self):
+        """
+        Persists the current in-memory TOML configuration document to disk.
+        """
         self.config_file.write_text(tomlkit.dumps(self.config_doc))
 
     def get(self, k):
-        self.load() # allow on disk changes
+        """
+        Retrieves a configuration value by key. Reloads from disk first to reflect external changes.
+
+        :param k: Configuration key name.
+        :type k: str
+        :returns: Value corresponding to the key.
+        """
+        self.load()  # allow on-disk changes
         return self.config_doc[k]
 
     def set(self, k, v):
+        """
+        Updates a configuration key-value pair and persists it immediately to disk.
+
+        :param k: Configuration key name.
+        :type k: str
+        :param v: Value to assign to the key.
+        """
         self.config_doc[k] = v
-        self.save() # preserve immediately
+        self.save()  # preserve immediately
