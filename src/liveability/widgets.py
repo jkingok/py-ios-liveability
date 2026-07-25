@@ -108,9 +108,9 @@ class LabelledProgress(toga.Box):
     def update(self, value:int):
         if self.bar.max:
             if self.bar.max == 100:
-                self.text.text = f"{value}%"
+                self.text.text = f"{int(value)}%"
             else:
-                self.text.text = f"{value}/{int(self.bar.max)}"
+                self.text.text = f"{int(value)}/{int(self.bar.max)}"
         else:
             self.text.text = "" 
         self.bar.value = value
