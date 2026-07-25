@@ -61,7 +61,7 @@ class AddressModel:
 
     def item_count_text(self):
         return f"{len(self.items_list_source)} location(s)"
-         
+
     def set_list_count_label(self, w):
         self.list_count_label = w
         w.text = self.item_count_text()
@@ -228,10 +228,12 @@ class ComparisonModel:
                 def step1(result, value, a, s):
                     if isinstance(value, ObjCClass('MKMapItem')):
                         # Continue with ETA
-                        def step2(result, value, a, s, t, m):
+                        def step2(result, value, a, s, t, ms):
                             if isinstance(value, ObjCClass('MKETAResponse')):
-                                if value.expectedTravelTime >= 11*60 and m != '🚗':
-                                    g.perform_eta((a[1].latitude, a[1].longitude), t, '🚗', lambda r, v, a=a, s=s, t=t, m='🚗': step2(r, v, a, s, t, m))
+				m = ms[0]
+				ms = ms[1:]
+                                if value.expectedTravelTime >= 11*60 and len(ms) > 0:
+                                    g.perform_eta((a[1].latitude, a[1].longitude), t, ms[0], lambda r, v, a=a, s=s, t=t, ms=ms: step2(r, v, a, s, t, ms))
                                 else:
                                     self.items_list_sources[a[0].title].append({
                                         "title": s.title,
@@ -252,7 +254,7 @@ class ComparisonModel:
                                 })
                                 self.queue.remove((a[0].title, s.title))
                                 self.done_one()
-                        g.perform_eta((a[1].latitude, a[1].longitude), value, '🥾', lambda r, v, a=a, s=s, t=value, m='🥾': step2(r, v, a, s, t, m))
+   			g.perform_eta((a[1].latitude, a[1].longitude), value, '🥾', lambda r, v, a=a, s=s, t=value, m='🥾🚲🚗': step2(r, v, a, s, t, m))
                     else:
                         self.items_list_sources[a[0].title].append({
                             "title": s.title,

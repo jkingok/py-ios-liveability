@@ -48,7 +48,7 @@ def perform_eta(fro, to, mode, callback):
     time_formatter.allowedUnits = (1 << 5) | (1 << 6) # Hour | Minute
     
     # Start with a walking route
-    mode_nums = { '🥾': 2, '🚗': 1 }
+    mode_nums = { '🚲': 8, '🚌': 4, '🥾': 2, '🚗': 1 }
     request = b.MKDirectionsRequest.alloc().init()
     if not isinstance(fro, ObjCClass('MKMapItem')):
         c = b.CLLocation.alloc().initWithLatitude(fro[0], longitude=fro[1])
