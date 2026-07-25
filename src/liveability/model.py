@@ -230,8 +230,8 @@ class ComparisonModel:
                         # Continue with ETA
                         def step2(result, value, a, s, t, ms):
                             if isinstance(value, ObjCClass('MKETAResponse')):
-				m = ms[0]
-				ms = ms[1:]
+                                m = ms[0]
+                                ms = ms[1:]
                                 if value.expectedTravelTime >= 11*60 and len(ms) > 0:
                                     g.perform_eta((a[1].latitude, a[1].longitude), t, ms[0], lambda r, v, a=a, s=s, t=t, ms=ms: step2(r, v, a, s, t, ms))
                                 else:
@@ -254,7 +254,7 @@ class ComparisonModel:
                                 })
                                 self.queue.remove((a[0].title, s.title))
                                 self.done_one()
-   			g.perform_eta((a[1].latitude, a[1].longitude), value, '🥾', lambda r, v, a=a, s=s, t=value, m='🥾🚲🚗': step2(r, v, a, s, t, m))
+                        g.perform_eta((a[1].latitude, a[1].longitude), value, '🥾', lambda r, v, a=a, s=s, t=value, m='🥾🚲🚗': step2(r, v, a, s, t, m))
                     else:
                         self.items_list_sources[a[0].title].append({
                             "title": s.title,
