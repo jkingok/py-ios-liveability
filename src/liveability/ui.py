@@ -383,4 +383,4 @@ class Prototype:
             else:
                 self.app.widgets["app_progress"].start(total)
                 self.app.widgets["app_progress"].update(done)
-            self.app.widgets["
+

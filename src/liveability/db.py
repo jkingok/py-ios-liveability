@@ -1,8 +1,8 @@
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from peewee import SqliteDatabase, Proxy, Select, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
-from playhouse import Model, post_save
+from peewee import SqliteDatabase, Proxy, Select, CompositeKey, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
+from playhouse.signals import Model, post_save
 from typing import Any, Callable
 
 db_ref = Proxy()
@@ -69,6 +69,32 @@ class TravelMode(Enum):
         self.code = code
         self.label = label
 
+        # Initialize reverse maps on class if they don't exist yet
+        if not hasattr(self.__class__, "_by_label"):
+            self.__class__._by_label: dict[str, Self] = {}
+            self.__class__._by_code: dict[int, Self] = {}
+
+        # Populate O(1) mappings
+        self.__class__._by_label[label] = self
+        self.__class__._by_code[code] = self
+
+    # --- O(1) Class Methods ---
+    @classmethod
+    def from_label(cls, label: str) -> Self:
+        """O(1) lookup by human-readable string."""
+        try:
+            return cls._by_label[label]
+        except KeyError:
+            raise ValueError(f"No {cls.__name__} member with label '{label}'") from None
+
+    @classmethod
+    def from_code(cls, code: int) -> Self:
+        """O(1) lookup by code."""
+        try:
+            return cls._by_code[code]
+        except KeyError:
+            raise ValueError(f"No {cls.__name__} member with code '{code}'") from None
+
     def __str__(self) -> str:
         return self.label
 
@@ -91,7 +117,7 @@ class Route(BaseModel):
 
     @property
     def subtitle() -> str:
-        return f"⚠ {self.error}" if self.error else f"By {self.mode} in x for y"
+        return f"⚠ {self.error}" if self.error else f"By {self.mode} in {self.time}s for {self.distance}m"
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:

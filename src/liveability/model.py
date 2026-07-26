@@ -73,11 +73,11 @@ class RouteGenerator:
             # ------------------------------------------
 
             #self._queue.task_done()
-            
+
             # Broadcast progress step
             self._notify_ui(is_busy=True)
-        
-	self._ensure_worker_running()
+
+        self._ensure_worker_running()
 
     def _notify_ui(self, is_busy: bool) -> None:
         """Dispatches progress metrics back to Toga's main GUI loop."""
@@ -103,9 +103,9 @@ class RouteGenerator:
                                 service=s,
                                 latitude=t.location.coordinate.latitude,
                                 longitude=t.location.coordinate.longitude,
-                                distance=
-                                time=
-                                mode=
+                                distance=value.distance,
+                                time=value.expectedTravelTime,
+                                mode=d.TravelMode.from_label(ms[0])
                             )
                             self._queue.task_done()
                             self._notify_ui(is_busy=False)
