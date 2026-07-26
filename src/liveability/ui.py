@@ -20,13 +20,13 @@ import toga
 import urllib
 
 from . import bridge as b
-from . import data as d
+#from . import data as d
+from . import db as d
 from . import functions as f
 from . import geography as g
 from . import model as m
 from . import settings as s
 from . import widgets as ws
-
 
 class Prototype:
     """
@@ -49,6 +49,7 @@ class Prototype:
         self.app.services = m.ServiceModel(host_app.paths, self.app.functions)
         self.app.comparisons = m.ComparisonModel(host_app.paths, self.app.functions)
         self.data_path = self.app.paths.data
+        d.init(self.data_path / f"{self.title}.db") # set up DB
         self.this_path = Path(__file__).resolve().parent
         self.icon_path = self.this_path / "resources" / "icons"
         self.template_path = self.this_path / "resources" / "templates"
@@ -68,10 +69,7 @@ class Prototype:
 
         :param row: DetailedList row item object containing `.index` or address properties.
         """
-        key = getattr(row, "index", None)
-        if key and (addr := self.app.addresses.get(key)):
-            g.open_in_maps([(addr.latitude, addr.longitude, addr.title)])
-        elif hasattr(row, "title") and hasattr(row, "latitude") and hasattr(row, "longitude"):
+        if hasattr(row, "title") and hasattr(row, "latitude") and hasattr(row, "longitude"):
             g.open_in_maps([(row.latitude, row.longitude, row.title)])
 
     def add_address(self, text: str = None, url: str = None):
@@ -84,14 +82,11 @@ class Prototype:
         :type url: str | None
         """
         def record_item(mi):
-            self.app.addresses.save(
-                str(i.identifierString if (i := mi.identifier) else mi.name),
-                {
-                    "title": str(mi.name),
-                    "subtitle": str(mi.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)),
-                    "latitude": mi.location.coordinate.latitude,
-                    "longitude": mi.location.coordinate.longitude
-                }
+            d.Address.create(
+                title=str(mi.name),
+                subtitle=str(mi.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)),
+                latitude=mi.location.coordinate.latitude,
+                longitude=mi.location.coordinate.longitude
             )
 
         def geocoded(r: objc_id, e: objc_id) -> None:
@@ -159,12 +154,9 @@ class Prototype:
         :param name: Service name string (e.g. 'Supermarket').
         :param emoji: Emoji symbol string (e.g. '🛒').
         """
-        self.app.services.save(
-            name,
-            {
-                "name": name,
-                "emoji": emoji
-            }
+        d.Service.create(
+            name=name,
+            emoji=emoji
         )
 
     def ask_for_service(self):
@@ -184,45 +176,35 @@ class Prototype:
             """
             Sub-view box for inspecting a specific address, its MapView, and calculated proximity amenities matrix.
             """
-            def __init__(self, stack=None, key=None, values=None, details=None):
-                self.key = key or dt.datetime.now().isoformat()
-                self.values = values or d.Address()
+            def __init__(self, row, stack):
+                self.row = row
+                self.stack = stack
                 super().__init__(
                     direction="column",
                     children=[
                         ws.LabelledText(
-                            "Key",
-                            value_text=self.key,
-                            readonly=True
-                        ),
-                        toga.Divider(),
-                        ws.LabelledText(
                             "Title",
-                            value_text=self.values.title,
-                            callback=lambda w: {
-                                self.set_value("title", w.value)
-                            }
+                            value_text=row.title,
+                            readonly=True
                         ),
                         ws.LabelledText(
                             "Subtitle",
-                            value_text=self.values.subtitle,
-                            callback=lambda w: {
-                                self.set_value("subtitle", w.value)
-                            }
+                            value_text=row.subtitle,
+                            readonly=True
                         ),
                         toga.MapView(
                             id="view_address_box_map",
                             flex=1,
-                            location=(ll := (self.values.latitude, self.values.longitude)),
+                            location=(ll := (row._instance.latitude, row._instance.longitude)),
                             zoom=15,
-                            pins=[toga.MapPin(ll, title="🏠"), *[toga.MapPin((v.latitude, v.longitude), title=v.title) for v in details if v.latitude and v.longitude]]
+                            pins=[toga.MapPin(ll, title="🏠"), *[ toga.MapPin((r.latitude, r.longitude), title=r.title) for r in row._instance.routes ]]
                         ),
                         toga.DetailedList(
                             flex=1,
                             primary_action="View",
-                            on_primary_action=lambda w, row: self.open_directions_in_maps(self.values, row),
-                            on_select=lambda w: setattr(self.app.widgets["view_address_box_map"], "location", (w.selection.latitude, w.selection.longitude)),
-                            data=details
+                            on_primary_action=lambda w, row: self.open_directions_in_maps(row),
+                            on_select=lambda w: setattr(self.app.widgets["view_address_box_map"], "location", (w.selection._instance.latitude, w.selection._instance.longitude)),
+                            data=d.DBListSource(model_or_query=row._instance.routes)
                         ),
                         toga.Row(
                             children=[
@@ -236,50 +218,37 @@ class Prototype:
                     ],
                     flex=1
                 )
-                self.stack = stack
 
-            def set_value(self, k: str, v):
-                """Sets an attribute value on the address object."""
-                setattr(self.values, k, v)
-                
-            def open_directions_in_maps(self, fro, to):
+            def open_directions_in_maps(self, row):
                 """
                 Opens the selected matching Service item from the List's directions from the Address in Apple Maps.
 
                 :param fro: DetailedList row item object of the Address
                 :param to: DetailedList row item object of the matching Service
                 """
-                g.open_in_maps([(fro.latitude, fro.longitude, fro.title), (to.latitude, to.longitude, to.title)], to.subtitle[len("By ")] if to.subtitle.startswith("By ") else None)
+                fro = row._instance.address
+                to = row._instance
+                g.open_in_maps([(fro.latitude, fro.longitude, fro.title), (to.latitude, to.longitude, to.title)], str(to.mode))
 
         class EditServiceBox(toga.Box):
             """
             Sub-view box for editing a service category name and emoji icon.
             """
-            def __init__(self, stack=None, key=None, values=None):
-                self.key = key or dt.datetime.now().isoformat()
-                self.values = values or d.Service()
+            def __init__(self, row, stack):
+                self.row = row
+                self.stack = stack
                 super().__init__(
                     direction="column",
                     children=[
                         ws.LabelledText(
-                            "Key",
-                            value_text=self.key,
-                            readonly=True
-                        ),
-                        toga.Divider(),
-                        ws.LabelledText(
                             "Name",
-                            value_text=self.values.name,
-                            callback=lambda w: {
-                                self.set_value("name", w.value)
-                            }
+                            id="edit_service_name",
+                            value_text=row._instance.name
                         ),
                         ws.LabelledText(
                             "Symbol",
-                            value_text=self.values.emoji,
-                            callback=lambda w: {
-                                self.set_value("emoji", w.value)
-                            }
+                            id="edit_service_emoji",
+                            value_text=row._instance.emoji
                         ),
                         toga.Box(
                             flex=1
@@ -289,15 +258,15 @@ class Prototype:
                                 toga.Button(
                                     "Back",
                                     flex=1,
-                                    on_press=lambda w: {
-                                        self.app.widgets[self.stack].pop()
-                                    }
+                                    on_press=lambda w: self.app.widgets[self.stack].pop()
                                 ),
                                 toga.Button(
                                     "Save",
                                     flex=1,
                                     on_press=lambda w: (
-                                        self.app.services.save(self.key, self.values),
+                                        setattr(self.row._instance, "name", self.app.widgets["edit_service_name"].value),
+                                        setattr(self.row._instance, "emoji", self.app.widgets["edit_service_emoji"].value),
+                                        self.row._instance.save(),
                                         self.app.widgets[self.stack].pop()
                                     )
                                 )
@@ -306,11 +275,6 @@ class Prototype:
                     ],
                     flex=1
                 )
-                self.stack = stack
-
-            def set_value(self, k: str, v):
-                """Sets an attribute value on the service object."""
-                setattr(self.values, k, v)
 
         return toga.OptionContainer(
             content=[
@@ -320,7 +284,11 @@ class Prototype:
                     children=[
                         toga.Row(
                             children=[
-                                self.app.addresses.set_list_count_label(toga.Label("", flex=1)),
+                                ws.DynamicLabel(
+                                    d.DBListSource(d.Address),
+                                    lambda v: f"{v} address(es)",
+                                    flex=1
+                                ),
                                 toga.Button(
                                     "Add",
                                     on_press=lambda _: self.ask_for_address()
@@ -329,28 +297,24 @@ class Prototype:
                         ),
                         toga.DetailedList(
                             flex=1,
-                            on_refresh=lambda w: {
-                                self.app.addresses.reload_items()
-                            },
                             primary_action="View",
                             on_primary_action=lambda w, row: self.open_address_in_maps(row),
                             secondary_action="Delete",
                             on_secondary_action=lambda w, row: self.app.addresses.delete(row.index),
-                            on_select=lambda w: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := w.selection.index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
-                            data=self.app.addresses.items_list_source
+                            on_select=lambda w: self.app.widgets["stack_list"].push(ViewAddressBox(w.selection, "stack_list")),
+                            data=d.DBListSource(d.Address)
                         ),
-                        self.app.addresses.set_map(toga.MapView(
-                            location=self.app.addresses.find_centre(),
+                        ws.DynamicMapView(
+                            d.Address.select(),
                             zoom=7,
-                            pins=[toga.MapPin(location=e, title=str(i + 1)) for i, e in enumerate(self.app.addresses.get_pins())],
-                            on_select=lambda w, pin: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
+                            # TODO on_select=lambda w, pin: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
                             flex=1
                         )),
                         toga.Row(
                             align_items="center",
                             children=[
-                                self.app.comparisons.set_activity(ws.LabelledActivity(id="app_activity")),
-                                self.app.comparisons.set_progress(ws.LabelledProgress(id="app_progress", flex=1))
+                                # TODO self.app.comparisons.set_activity(ws.LabelledActivity(id="app_activity")),
+                                # TODO self.app.comparisons.set_progress(ws.LabelledProgress(id="app_progress", flex=1))
                             ]
                         )
                     ]), self.icon_path / "list.png"),
@@ -360,7 +324,11 @@ class Prototype:
                     children=[
                         toga.Row(
                             children=[
-                                self.app.services.set_list_count_label(toga.Label("", flex=1)),
+                                ws.DynamicLabel(
+                                    d.DBListSource(d.Service),
+                                    lambda v: f"{v} service(s)",
+                                    flex=1
+                                ),
                                 toga.Button(
                                     "Add",
                                     on_press=lambda _: self.ask_for_service()
@@ -369,17 +337,12 @@ class Prototype:
                         ),
                         toga.DetailedList(
                             flex=1,
-                            on_refresh=lambda w: {
-                                self.app.services.reload_items()
-                            },
                             primary_action="View",
                             on_primary_action=lambda w, row: asyncio.create_task(self.todo("View")),
                             secondary_action="Delete",
-                            on_secondary_action=lambda w, row: self.app.services.delete(row.index),
-                            on_select=lambda w: {
-                                self.app.widgets["stack_setup"].push(EditServiceBox("stack_setup", i := w.selection.index, self.app.services.get(i)))
-                            },
-                            data=self.app.services.items_list_source
+                            on_secondary_action=lambda w, row: row._instance.delete_instance(),
+                            on_select=lambda w: self.app.widgets["stack_setup"].push(EditServiceBox(w.selection, "stack_setup")),
+                            data=d.DBListSource(d.Service)
                         ),
                         toga.Button(
                             "Exit",

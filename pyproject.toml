@@ -3,6 +3,7 @@ name = "liveability"
 description = "Template for an application"
 dependencies = [
     "markdown",
+    "peewee",
     "tomlkit"
 ]
 

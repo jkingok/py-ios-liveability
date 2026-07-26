@@ -9,6 +9,132 @@ dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via
 import asyncio
 from pathlib import Path
 import toga
+from toga.sources import ListSource, Row
+from typing import Any, Callable
+
+class DynamicLabel(toga.Label):
+    def __init__(self, source, formatter=None, **kwargs):
+        self.source = source
+        self.source.on_count_change = self.update
+        self.formatter = formatter if formatter else str
+        super().__init__(**kwargs)
+
+    def update(self, value):
+        self.text = self.formatter(value)
+
+class DynamicMapView(toga.MapView):
+    """A Toga MapView that dynamically renders pins and centers on their centroid."""
+
+    def __init__(
+        self,
+        data: ListSource | None = None,
+        lat_accessor: str = "latitude",
+        lon_accessor: str = "longitude",
+        title_accessor: str = "title",
+        subtitle_accessor: str | None = None,
+        auto_center: bool = True,
+        **kwargs: Any
+    ) -> None:
+        super().__init__(**kwargs)
+
+        self.lat_accessor = lat_accessor
+        self.lon_accessor = lon_accessor
+        self.title_accessor = title_accessor
+        self.subtitle_accessor = subtitle_accessor
+        self.auto_center = auto_center
+
+        self._pin_map: dict[int, toga.MapPin] = {}
+        self._data: ListSource | None = None
+
+        if data is not None:
+            self.data = data
+
+    # --- Centroid Calculation ---
+
+    def _recalculate_centre(self) -> None:
+        """Calculates the geographic centroid of all active pins and updates map center."""
+        if not self.auto_center or not self._pin_map:
+            return
+
+        total_lat = 0.0
+        total_lon = 0.0
+        count = len(self._pin_map)
+
+        for pin in self._pin_map.values():
+            lat, lon = pin.location
+            total_lat += lat
+            total_lon += lon
+
+        # Compute arithmetic mean
+        avg_lat = total_lat / count
+        avg_lon = total_lon / count
+
+        # Update Toga MapView center attribute
+        self.center = (avg_lat, avg_lon)
+
+    # --- Helper for Row -> Pin Conversion ---
+
+    def _create_pin_from_row(self, row: Row) -> toga.MapPin:
+        lat = float(getattr(row, self.lat_accessor))
+        lon = float(getattr(row, self.lon_accessor))
+        title = str(getattr(row, self.title_accessor))
+        subtitle = (
+            str(getattr(row, self.subtitle_accessor))
+            if self.subtitle_accessor and hasattr(row, self.subtitle_accessor)
+            else None
+        )
+
+        return toga.MapPin(
+            location=(lat, lon),
+            title=title,
+            subtitle=subtitle
+        )
+
+    # --- Toga Source Listener Hooks ---
+
+    def source_change(self, source: ListSource) -> None:
+        """Full reload / reset of source data."""
+        self.pins.clear()
+        self._pin_map.clear()
+
+        for row in source:
+            pin = self._create_pin_from_row(row)
+            self._pin_map[id(row)] = pin
+            self.pins.add(pin)
+
+        self._recalculate_centre()
+
+    def item_inserted(self, index: int, item: Row) -> None:
+        """Single item added."""
+        pin = self._create_pin_from_row(item)
+        self._pin_map[id(item)] = pin
+        self.pins.add(pin)
+
+        self._recalculate_centre()
+
+    def item_removed(self, index: int, item: Row) -> None:
+        """Single item removed."""
+        row_key = id(item)
+        if row_key in self._pin_map:
+            pin = self._pin_map.pop(row_key)
+            self.pins.remove(pin)
+
+        self._recalculate_centre()
+
+    def item_change(self, item: Row) -> None:
+        """Item updated in place (e.g. coordinates shifted)."""
+        row_key = id(item)
+        if row_key in self._pin_map:
+            # Remove old pin representation
+            old_pin = self._pin_map.pop(row_key)
+            self.pins.remove(old_pin)
+
+        # Insert updated pin representation
+        new_pin = self._create_pin_from_row(item)
+        self._pin_map[row_key] = new_pin
+        self.pins.add(new_pin)
+
+        self._recalculate_centre()
 
 class LabelledDate(toga.Box):
     """
