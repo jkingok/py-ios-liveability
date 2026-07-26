@@ -169,8 +169,12 @@ class DBListSource(ListSource):
         self.on_count_change = on_count_change
 
         # Wire signals to fine-grained update handlers
-        post_save.connect(self._on_post_save, sender=self.model_cls)
-        post_delete.connect(self._on_post_delete, sender=self.model_cls)
+        # Generate a unique ID for this instance (using id(self))
+        dispatch_uid = f"{self.model_cls.__name__}_{id(self)}"
+
+        # Connect using dispatch_uid to allow multiple DBListSource instances
+        post_save.connect(self._on_post_save, sender=self.model_cls, dispatch_uid=f"{dispatch_uid}_save")
+        post_delete.connect(self._on_post_delete, sender=self.model_cls, dispatch_uid=f"{dispatch_uid}_delete")
 
         self.reload_from_db()
 
