@@ -22,7 +22,7 @@ import urllib
 from . import bridge as b
 #from . import data as d
 from . import db as d
-from . import functions as f
+#from . import functions as f
 from . import geography as g
 from . import model as m
 from . import settings as s
@@ -44,15 +44,17 @@ class Prototype:
         self.on_done_callback = on_done  # This is your ticket back to safety
         self.title = "Liveability"  # host_app.formal_name
         self.app.settings = s.Settings(host_app.paths)
-        self.app.functions = f.Functions(host_app.paths, self.app.settings)
-        self.app.addresses = m.AddressModel(host_app.paths, self.app.functions)
-        self.app.services = m.ServiceModel(host_app.paths, self.app.functions)
-        self.app.comparisons = m.ComparisonModel(host_app.paths, self.app.functions)
+        #self.app.functions = f.Functions(host_app.paths, self.app.settings)
+        #self.app.addresses = m.AddressModel(host_app.paths, self.app.functions)
+        #self.app.services = m.ServiceModel(host_app.paths, self.app.functions)
+        #self.app.comparisons = m.ComparisonModel(host_app.paths, self.app.functions)
         self.data_path = self.app.paths.data
         d.init(self.data_path / f"{self.title}.db") # set up DB
         self.this_path = Path(__file__).resolve().parent
         self.icon_path = self.this_path / "resources" / "icons"
         self.template_path = self.this_path / "resources" / "templates"
+        self.app.routes = m.RouteGenerator()
+        self.app.routes.on_progress_update = self.progress_update
 
     async def todo(self, name: str):
         """
@@ -313,8 +315,8 @@ class Prototype:
                         toga.Row(
                             align_items="center",
                             children=[
-                                # TODO self.app.comparisons.set_activity(ws.LabelledActivity(id="app_activity")),
-                                # TODO self.app.comparisons.set_progress(ws.LabelledProgress(id="app_progress", flex=1))
+                                ws.LabelledActivity(id="app_activity"),
+                                ws.LabelledProgress(id="app_progress", flex=1)
                             ]
                         )
                     ]), self.icon_path / "list.png"),
@@ -371,3 +373,14 @@ class Prototype:
                             flex=1)]), self.icon_path / "interrogation.png")
             ],
         )
+
+    def progress_update(self, is_busy, done, total):
+        if "app_activity" in self.app.widgets:
+            self.app.widgets["app_activity"].update("Busy" if is_busy else "Ready", is_busy)
+        if "app_progress" in self.app.widgets:
+            if done == total:
+                self.app.widgets["app_progress"].stop()
+            else:
+                self.app.widgets["app_progress"].start(total)
+                self.app.widgets["app_progress"].update(done)
+            self.app.widgets["

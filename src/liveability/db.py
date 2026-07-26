@@ -1,7 +1,8 @@
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from peewee import SqliteDatabase, Model, Proxy, Select, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
+from peewee import SqliteDatabase, Proxy, Select, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
+from playhouse import Model, post_save
 from typing import Any, Callable
 
 db_ref = Proxy()
@@ -28,7 +29,6 @@ class Service(BaseModel):
     @property
     def subtitle() -> str:
         return self.emoji
-
 
 class EnumField(Field):
     """Custom Peewee Field for storing Enums by an explicit attribute (e.g., 'code')."""
@@ -73,13 +73,25 @@ class TravelMode(Enum):
         return self.label
 
 class Route(BaseModel):
-    address = ForeignKeyField(Address, backref='routes')
-    service = ForeignKeyField(Service)
-    latitude = FloatField()
-    longitude = FloatField()
-    distance = FloatField() # metres
-    time = IntegerField() # seconds
-    mode = EnumField(TravelMode, value_attr="code")
+    address = ForeignKeyField(Address, backref='routes', on_delete="CASCADE")
+    service = ForeignKeyField(Service, backref='routes', on_delete="CASCADE")
+    latitude = FloatField(null=True)
+    longitude = FloatField(null=True)
+    distance = FloatField(null=True) # metres
+    time = IntegerField(null=True) # seconds
+    mode = EnumField(TravelMode, value_attr="code", null=True)
+    error = CharField(null=True)
+
+    class Meta:
+        primary_key = CompositeKey("address", "service")
+
+    @property
+    def title() -> str:
+        return self.service.name
+
+    @property
+    def subtitle() -> str:
+        return f"⚠ {self.error}" if self.error else f"By {self.mode} in x for y"
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:
