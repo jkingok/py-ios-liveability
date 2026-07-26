@@ -9,7 +9,7 @@ mgr = None
 
 class BaseModel(Model):
     class Meta:
-        database = get().db
+        database = db_ref
 
 class Address(BaseModel):
     title = CharField()
@@ -119,18 +119,18 @@ class DBListSource(ListSource):
         self.on_count_change = on_count_change
         self.reload_from_db()
 
-    def get_count( -> int:
+    def get_count(self) -> int:
         """Efficiently fetches the total row count from SQLite via Peewee."""
         # Querying count() directly via SQL is faster than len(self) for huge datasets
         return self.query.count()
 
-    def _notify_count( -> None:
+    def _notify_count(self) -> None:
         """Fires the callback to update UI elements like Toga Labels."""
         if self.on_count_change:
             # We can use get_count() or len(self) if all items are in memory
             self.on_count_change(self.get_count())
 
-    def reload_from_db( -> None:
+    def reload_from_db(self) -> None:
         self.clear()
         for instance in self.query:
             row_data = {f: getattr(instance, f) for f in self._accessors}

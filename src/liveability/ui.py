@@ -309,7 +309,7 @@ class Prototype:
                             zoom=7,
                             # TODO on_select=lambda w, pin: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
                             flex=1
-                        )),
+                        ),
                         toga.Row(
                             align_items="center",
                             children=[

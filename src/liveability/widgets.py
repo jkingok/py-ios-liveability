@@ -17,7 +17,8 @@ class DynamicLabel(toga.Label):
         self.source = source
         self.source.on_count_change = self.update
         self.formatter = formatter if formatter else str
-        super().__init__(**kwargs)
+        super().__init__("", **kwargs)
+        self.update(0)
 
     def update(self, value):
         self.text = self.formatter(value)
