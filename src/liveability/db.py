@@ -156,7 +156,7 @@ class DBListSource(ListSource):
         on_count_change: Callable[[int], None] | None = None
     ):
         if not accessors:
-            accessors = ["icon", "title", "subtitle"]
+            accessors = ["title", "subtitle", "icon"]
         super().__init__(accessors=accessors)
 
         if isinstance(model_or_query, Select):
@@ -180,20 +180,27 @@ class DBListSource(ListSource):
             # We can use get_count() or len(self) if all items are in memory
             self.on_count_change(self.get_count())
 
+    def _create_row_from_instance(self, instance: Model) -> Row:
+        # Extract values in the exact positional order of self._accessors
+        values = [getattr(instance, f, None) for f in self._accessors]
+
+        # Pass values POSITIONALLY into Row so Toga assigns them to accessors
+        row = Row(*values)
+
+        # Attach the underlying Peewee model instance for selection handling
+        row._instance = instance
+        return row
+
     def reload_from_db(self) -> None:
         self.clear()
         for instance in self.query:
-            row_data = {f: getattr(instance, f) for f in self._accessors}
-            row = Row(**row_data)
-            row._instance = instance
+            row = self._create_row_from_instance(instance)
             self.append(row)
         self._notify_count()
 
     def add_instance(self, instance: Model) -> Row:
         instance.save()
-        row_data = {f: getattr(instance, f) for f in self._accessors}
-        row = Row(**row_data)
-        row._instance = instance
+        row = self._create_row_from_instance(instance)
         self.append(row)
         self._notify_count()  # Trigger count update
         return row
