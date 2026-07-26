@@ -17,6 +17,7 @@ from rubicon.objc.runtime import load_library, objc_id
 from rubicon.objc.types import ctype_for_encoding
 import threading
 import toga
+import traceback
 import urllib
 
 from . import bridge as b
@@ -170,6 +171,7 @@ class Prototype:
         ws.Utils.ask_for_input(self.app, "Service", "Enter an address, search term, and a symbol to use for it", [("Add", self.add_service), ("Cancel",)], 2)
 
     def get_content(self) -> toga.OptionContainer:
+      try:
         """
         Constructs and returns the main Toga OptionContainer view layout with tabs ('List', 'Setup', 'Help').
 
@@ -375,7 +377,10 @@ class Prototype:
                             flex=1)]), self.icon_path / "interrogation.png")
             ],
         )
-
+      except Exception as e:
+        self.app.main_window.dialog(toga.InfoDialog(str(e), str(traceback.format_exc())))
+        print(traceback.format_exc())
+ 
     def progress_update(self, is_busy, done, total):
         if "app_activity" in self.app.widgets:
             self.app.widgets["app_activity"].update("Busy" if is_busy else "Ready", is_busy)

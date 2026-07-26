@@ -133,10 +133,20 @@ class Route(BaseModel):
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:
-        self.db = SqliteDatabase(db_path)
+        self.db = SqliteDatabase(
+            db_path,
+            pragmas={'foreign_keys': 1}
+        )
         db_ref.initialize(self.db)
         self.db.connect()
         self.db.create_tables([Address, Service, Route])
+        # Delete routes where the referenced address no longer exists
+        Route.delete().where(
+            Route.address.not_in(Address.select(Address.id))
+        ).execute()
+        Route.delete().where(
+            Route.service.not_in(Service.select(Service.id))
+        ).execute()
 
 @lru_cache(maxsize=1)
 def init(db_path: Path | None = None) -> None:
@@ -180,10 +190,12 @@ class DBListSource(ListSource):
 
     def _extract_data(self, instance: Model) -> dict[str, str]:
         """Utility to convert instance attributes into dictionary for ListSource."""
-        return {
+        values = {
             f: (getattr(instance, f)) # if getattr(instance, f) is not None else "")
             for f in self._accessors
         }
+        values["_instance"] = instance
+        return values
 
     def _find_row_by_instance(self, instance: Model) -> tuple[int, Row | None]:
         """Finds the index and Row object corresponding to a Peewee model instance."""
@@ -194,12 +206,11 @@ class DBListSource(ListSource):
         return -1, None
 
     def _on_post_save(self, sender, instance, created: bool, **kwargs) -> None:
-        row_data = self._extract_data(instance)
+        row_data = self._extract_data(instance) 
 
         if created:
             # 1. NEW ITEM: Append directly
             row = self.append(row_data)
-            row._instance = instance
             self._notify_count()
         else:
             # 2. UPDATED ITEM: Locate existing row and update attributes in place
@@ -237,9 +248,9 @@ class DBListSource(ListSource):
         self.clear()
         for instance in self.query:
             row_data = {f: (getattr(instance, f) if getattr(instance, f) is not None else "") for f in self._accessors}
+            row_data["_instance"] = instance
             # Bypassing explicit Row instantiation by appending dict directly
             row = self.append(row_data)
-            row._instance = instance
         self._notify_count()
 
     def add_instance(self, instance: Model) -> Row:

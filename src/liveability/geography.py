@@ -79,7 +79,7 @@ def perform_search_at(search_string: str, latitude: float, longitude: float, cal
 
                 # Loop through native search results
                 for item in mapItems:
-                    print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)}")
+                    print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if item.addressRepresentations else "?"}")
                 callback(mapItems[0].name, mapItems[0])
 
     # 3. Initialize the search and kick it off

@@ -40,7 +40,7 @@ class DynamicMapView(toga.MapView):
         self._data: ListSource | None = data
 
         if data is not None:
-            self.source_change(data)
+            #self.source_change(data)
             data.add_listener(self)
 
     # --- Centroid Calculation ---

@@ -8,6 +8,7 @@ records to Toga GUI `ListSource` data providers and manage asynchronous proximit
 import datetime as dt
 from itertools import product
 from pathlib import Path
+from playhouse.signals import Model, post_delete, post_save
 from queue import Queue
 from rubicon.objc import ObjCClass
 import toga
@@ -24,6 +25,14 @@ class RouteGenerator:
 
         # UI Callback hooks: fn(is_busy, current_progress, total_tasks)
         self.on_progress_update: Callable[[bool, int, int], None] | None = None
+
+        # Generate a unique ID for this instance (using id(self))
+        address_uid = f"{d.Address.__name__}_{id(self)}"
+        service_uid = f"{d.Service.__name__}_{id(self)}"
+        
+        # Connect using dispatch_uid to allow multiple DBListSource instances
+        post_save.connect(self._on_address_save, sender=d.Address, name=f"{address_uid}_save")
+        post_save.connect(self._on_service_save, sender=d.Service, name=f"{service_uid}_save")
 
     def trigger_full_recalculate(self) -> None:
         """Queues all Address/Service pairs that don't yet have a Route."""
@@ -54,6 +63,13 @@ class RouteGenerator:
         for addr in addresses:
             self._queue.put((addr, service))
         self._ensure_worker_running()
+
+    def _on_address_save(self, sender, instance, created: bool, **kwargs) -> None:
+        if created:
+            self.trigger_address_added(instance)
+
+    def _on_service_save(self, sender, instance, created: bool, **kwargs) -> None:
+        self.trigger_service_updated(instance) 
 
     def _ensure_worker_running(self) -> None:
         if not self._queue.empty():
@@ -105,7 +121,8 @@ class RouteGenerator:
                                 longitude=t.location.coordinate.longitude,
                                 distance=value.distance,
                                 time=value.expectedTravelTime,
-                                mode=d.TravelMode.from_label(ms[0])
+                                mode=d.TravelMode.from_label(m),
+                                error=None
                             ).execute()
                             self._queue.task_done()
                             self._notify_ui(is_busy=False)
