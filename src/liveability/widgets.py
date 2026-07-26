@@ -29,19 +29,11 @@ class DynamicMapView(toga.MapView):
     def __init__(
         self,
         data: ListSource | None = None,
-        lat_accessor: str = "latitude",
-        lon_accessor: str = "longitude",
-        title_accessor: str = "title",
-        subtitle_accessor: str | None = None,
         auto_center: bool = True,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
 
-        self.lat_accessor = lat_accessor
-        self.lon_accessor = lon_accessor
-        self.title_accessor = title_accessor
-        self.subtitle_accessor = subtitle_accessor
         self.auto_center = auto_center
 
         self._pin_map: dict[int, toga.MapPin] = {}
@@ -77,19 +69,13 @@ class DynamicMapView(toga.MapView):
     # --- Helper for Row -> Pin Conversion ---
 
     def _create_pin_from_row(self, row: Row) -> toga.MapPin:
-        lat = float(getattr(row, self.lat_accessor))
-        lon = float(getattr(row, self.lon_accessor))
-        title = str(getattr(row, self.title_accessor))
-        subtitle = (
-            str(getattr(row, self.subtitle_accessor))
-            if self.subtitle_accessor and hasattr(row, self.subtitle_accessor)
-            else None
-        )
+        lat = row._instance.latitude
+        lon = row._instance.longitude
 
         return toga.MapPin(
             location=(lat, lon),
-            title=title,
-            subtitle=subtitle
+            title=row.title,
+            subtitle=row.subtitle
         )
 
     # --- Toga Source Listener Hooks ---

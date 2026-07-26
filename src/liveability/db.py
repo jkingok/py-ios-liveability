@@ -173,8 +173,8 @@ class DBListSource(ListSource):
         dispatch_uid = f"{self.model_cls.__name__}_{id(self)}"
 
         # Connect using dispatch_uid to allow multiple DBListSource instances
-        post_save.connect(self._on_post_save, sender=self.model_cls, dispatch_uid=f"{dispatch_uid}_save")
-        post_delete.connect(self._on_post_delete, sender=self.model_cls, dispatch_uid=f"{dispatch_uid}_delete")
+        post_save.connect(self._on_post_save, sender=self.model_cls, name=f"{dispatch_uid}_save")
+        post_delete.connect(self._on_post_delete, sender=self.model_cls, name=f"{dispatch_uid}_delete")
 
         self.reload_from_db()
 

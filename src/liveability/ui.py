@@ -71,8 +71,7 @@ class Prototype:
 
         :param row: DetailedList row item object containing `.index` or address properties.
         """
-        if hasattr(row, "title") and hasattr(row, "latitude") and hasattr(row, "longitude"):
-            g.open_in_maps([(row.latitude, row.longitude, row.title)])
+        g.open_in_maps([(row._instance.latitude, row._instance.longitude, row.title)])
 
     def add_address(self, text: str = None, url: str = None):
         """
