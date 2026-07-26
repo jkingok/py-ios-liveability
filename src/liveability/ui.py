@@ -84,12 +84,14 @@ class Prototype:
         :type url: str | None
         """
         def record_item(mi):
+            print(f"Adding {str(mi.name)}...")
             d.Address.create(
                 title=str(mi.name),
                 subtitle=str(mi.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)),
                 latitude=mi.location.coordinate.latitude,
                 longitude=mi.location.coordinate.longitude
             )
+            asyncio.create_task(self.app.main_window.dialog(toga.InfoDialog("Address Added", str(mi.name))))
 
         def geocoded(r: objc_id, e: objc_id) -> None:
             if e:
