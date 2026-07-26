@@ -19,7 +19,7 @@ class Address(BaseModel):
     longitude = FloatField()
 
     @property
-    def icon() -> None:
+    def icon(self) -> None:
         return None
 
 class Service(BaseModel):
@@ -27,15 +27,15 @@ class Service(BaseModel):
     emoji = CharField()
 
     @property
-    def icon() -> None:
+    def icon(self) -> None:
         return None
 
     @property
-    def title() -> str:
+    def title(self) -> str:
         return self.name
 
     @property
-    def subtitle() -> str:
+    def subtitle(self) -> str:
         return self.emoji
 
 class EnumField(Field):
@@ -120,15 +120,15 @@ class Route(BaseModel):
         primary_key = CompositeKey("address", "service")
 
     @property
-    def icon() -> None:
+    def icon(self) -> None:
         return None
 
     @property
-    def title() -> str:
+    def title(self) -> str:
         return self.service.name
 
     @property
-    def subtitle() -> str:
+    def subtitle(self) -> str:
         return f"⚠ {self.error}" if self.error else f"By {self.mode} in {self.time}s for {self.distance}m"
 
 class _Manager:
