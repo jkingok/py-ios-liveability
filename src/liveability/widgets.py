@@ -80,19 +80,12 @@ class DynamicMapView(toga.MapView):
 
     # --- Toga Source Listener Hooks ---
 
-    def source_change(self, source: ListSource) -> None:
-        """Full reload / reset of source data."""
+    def source_clear(self) -> None:
+        """Reset of source data."""
         self.pins.clear()
         self._pin_map.clear()
 
-        for row in source:
-            pin = self._create_pin_from_row(row)
-            self._pin_map[id(row)] = pin
-            self.pins.add(pin)
-
-        self._recalculate_centre()
-
-    def item_inserted(self, index: int, item: Row) -> None:
+    def source_insert(self, index: int, item) -> None:
         """Single item added."""
         pin = self._create_pin_from_row(item)
         self._pin_map[id(item)] = pin
@@ -100,7 +93,7 @@ class DynamicMapView(toga.MapView):
 
         self._recalculate_centre()
 
-    def item_removed(self, index: int, item: Row) -> None:
+    def source_remove(self, index: int, item) -> None:
         """Single item removed."""
         row_key = id(item)
         if row_key in self._pin_map:
@@ -109,7 +102,7 @@ class DynamicMapView(toga.MapView):
 
         self._recalculate_centre()
 
-    def item_change(self, item: Row) -> None:
+    def source_change(self, item) -> None:
         """Item updated in place (e.g. coordinates shifted)."""
         row_key = id(item)
         if row_key in self._pin_map:
