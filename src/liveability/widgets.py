@@ -18,7 +18,7 @@ class DynamicLabel(toga.Label):
         self.source.on_count_change = self.update
         self.formatter = formatter if formatter else str
         super().__init__("", **kwargs)
-        self.update(0)
+        self.update(self.source.get_count())
 
     def update(self, value):
         self.text = self.formatter(value)
@@ -45,10 +45,11 @@ class DynamicMapView(toga.MapView):
         self.auto_center = auto_center
 
         self._pin_map: dict[int, toga.MapPin] = {}
-        self._data: ListSource | None = None
+        self._data: ListSource | None = data
 
         if data is not None:
-            self.data = data
+            self.source_change(data)
+            data.add_listener(self)
 
     # --- Centroid Calculation ---
 

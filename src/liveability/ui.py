@@ -309,7 +309,7 @@ class Prototype:
                             data=d.DBListSource(d.Address)
                         ),
                         ws.DynamicMapView(
-                            d.Address.select(),
+                            d.DBListSource(d.Address.select()),
                             zoom=7,
                             # TODO on_select=lambda w, pin: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
                             flex=1

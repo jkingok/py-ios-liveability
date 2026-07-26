@@ -2,7 +2,7 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from peewee import SqliteDatabase, Proxy, Select, CompositeKey, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
-from playhouse.signals import Model, post_save
+from playhouse.signals import Model, post_delete, post_save
 from typing import Any, Callable
 
 db_ref = Proxy()
@@ -167,7 +167,56 @@ class DBListSource(ListSource):
             self.query = model_or_query.select()
 
         self.on_count_change = on_count_change
+
+        # Wire signals to fine-grained update handlers
+        post_save.connect(self._on_post_save, sender=self.model_cls)
+        post_delete.connect(self._on_post_delete, sender=self.model_cls)
+
         self.reload_from_db()
+
+    def _extract_data(self, instance: Model) -> dict[str, str]:
+        """Utility to convert instance attributes into dictionary for ListSource."""
+        return {
+            f: (getattr(instance, f)) # if getattr(instance, f) is not None else "")
+            for f in self._accessors
+        }
+
+    def _find_row_by_instance(self, instance: Model) -> tuple[int, Row | None]:
+        """Finds the index and Row object corresponding to a Peewee model instance."""
+        pk = instance._pk
+        for index, row in enumerate(self):
+            if hasattr(row, "_instance") and row._instance._pk == pk:
+                return index, row
+        return -1, None
+
+    def _on_post_save(self, sender, instance, created: bool, **kwargs) -> None:
+        row_data = self._extract_data(instance)
+
+        if created:
+            # 1. NEW ITEM: Append directly
+            row = self.append(row_data)
+            row._instance = instance
+            self._notify_count()
+        else:
+            # 2. UPDATED ITEM: Locate existing row and update attributes in place
+            idx, row = self._find_row_by_instance(instance)
+            if row is not None:
+                # Update attributes on the existing Toga Row
+                for key, val in row_data.items():
+                    setattr(row, key, val)
+
+                # Keep internal model instance current
+                row._instance = instance
+
+                # Notify attached Toga listeners (like MapView or DetailedList) of row updates
+                self._notify("change", item=row)
+
+    def _on_post_delete(self, sender, instance, **kwargs) -> None:
+        # 3. DELETED ITEM: Locate and remove only the deleted row
+        idx, row = self._find_row_by_instance(instance)
+        if row is not None:
+            self.remove(row)
+            self._notify_count()
 
     def get_count(self) -> int:
         """Efficiently fetches the total row count from SQLite via Peewee."""
@@ -180,33 +229,21 @@ class DBListSource(ListSource):
             # We can use get_count() or len(self) if all items are in memory
             self.on_count_change(self.get_count())
 
-    def _create_row_from_instance(self, instance: Model) -> Row:
-        # Extract values in the exact positional order of self._accessors
-        values = [getattr(instance, f, None) for f in self._accessors]
-
-        # Pass values POSITIONALLY into Row so Toga assigns them to accessors
-        row = Row(*values)
-
-        # Attach the underlying Peewee model instance for selection handling
-        row._instance = instance
-        return row
-
     def reload_from_db(self) -> None:
         self.clear()
         for instance in self.query:
-            row = self._create_row_from_instance(instance)
-            self.append(row)
+            row_data = {f: (getattr(instance, f) if getattr(instance, f) is not None else "") for f in self._accessors}
+            # Bypassing explicit Row instantiation by appending dict directly
+            row = self.append(row_data)
+            row._instance = instance
         self._notify_count()
 
     def add_instance(self, instance: Model) -> Row:
         instance.save()
-        row = self._create_row_from_instance(instance)
-        self.append(row)
-        self._notify_count()  # Trigger count update
-        return row
+        # post_save signal will handle reload_from_db() automatically
+        return self[-1] if len(self) > 0 else None
 
     def remove_instance(self, row: Row) -> None:
         if hasattr(row, "_instance"):
             row._instance.delete_instance()
-        self.remove(row)
-        self._notify_count()  # Trigger count update
+            # post_delete signal handles reload_from_db() automatically
