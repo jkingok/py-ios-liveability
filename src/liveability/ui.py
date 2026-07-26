@@ -303,7 +303,7 @@ class Prototype:
                             primary_action="View",
                             on_primary_action=lambda w, row: self.open_address_in_maps(row),
                             secondary_action="Delete",
-                            on_secondary_action=lambda w, row: self.app.addresses.delete(row.index),
+                            on_secondary_action=lambda w, row: row._instance.delete_instance(),
                             on_select=lambda w: self.app.widgets["stack_list"].push(ViewAddressBox(w.selection, "stack_list")),
                             data=d.DBListSource(d.Address)
                         ),
