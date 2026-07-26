@@ -41,6 +41,8 @@ class DynamicMapView(toga.MapView):
 
         if data is not None:
             #self.source_change(data)
+            for row in data:
+                self.source_insert(None, row)
             data.add_listener(self)
 
     # --- Centroid Calculation ---
