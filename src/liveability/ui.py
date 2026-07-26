@@ -55,6 +55,7 @@ class Prototype:
         self.template_path = self.this_path / "resources" / "templates"
         self.app.routes = m.RouteGenerator()
         self.app.routes.on_progress_update = self.progress_update
+        self.app.routes.trigger_full_recalculate()
 
     async def todo(self, name: str):
         """
