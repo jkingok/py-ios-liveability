@@ -18,9 +18,17 @@ class Address(BaseModel):
     latitude = FloatField()
     longitude = FloatField()
 
+    @property
+    def icon() -> None:
+        return None
+
 class Service(BaseModel):
     name = CharField()
     emoji = CharField()
+
+    @property
+    def icon() -> None:
+        return None
 
     @property
     def title() -> str:
@@ -110,6 +118,10 @@ class Route(BaseModel):
 
     class Meta:
         primary_key = CompositeKey("address", "service")
+
+    @property
+    def icon() -> None:
+        return None
 
     @property
     def title() -> str:
