@@ -52,7 +52,7 @@ def generic_completion(response_ptr, error_ptr, future):
          error = ObjCInstance(error_ptr)
          loop.call_soon_threadsafe(
              future.set_exception, RuntimeError(str(error.localizedDescription))
-         }
+         )
      else:
          response = ObjCInstance(response_ptr)
          loop.call_soon_threadsafe(
@@ -102,12 +102,12 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
         )
         mapItems = list(await future.mapItems)
         if len(mapItems) > 0:
-            print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name]}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
+            print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
             callback(mapItems[0].name, mapItems[0])
         else:
             callback("Search returned no results", None)
     except Exception as e:
-        callback("Search failed: str{e}, e)
+        callback("Search failed: str{e}", e)
 
 def perform_eta(fro, to, mode: str, callback) -> None:
     """

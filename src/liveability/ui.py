@@ -56,7 +56,7 @@ class Prototype:
         d.init(self.data_path / f"{self.title}.db") # set up DB
         self.app.routes = m.RouteGenerator()
         self.app.routes.on_progress_update = self.progress_update
-        asyncio.create_task(self.app.routes.trigger_full_recalculate)
+        self.app.loop.call_soon(self.app.routes.trigger_full_recalculate)
 
     def _error(self, title, text):
         print(f"⚠ {title}: {text}")
@@ -119,7 +119,7 @@ class Prototype:
                 rgr = b.MKReverseGeocodingRequest.alloc().initWithLocation(loc)
                 rgr.getMapItemsWithCompletionHandler(geocoded)
             else:
-                self._error("Search Failure", "Cannot extract location from URL")))
+                self._error("Search Failure", "Cannot extract location from URL")
         else:
             gr = b.MKGeocodingRequest.alloc().initWithAddressString(text)
             gr.getMapItemsWithCompletionHandler(geocoded)

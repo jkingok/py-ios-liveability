@@ -72,7 +72,7 @@ class MyApp(toga.App):
             mw.content = app.proto.get_content()
         except Exception as e:
             traceback.print_exc()
-            app.main_window.dialog(toga.ErrorDialog("Error Occurred", str(e)))
+            app.loop.call_soon(main_window.dialog(toga.ErrorDialog("Error Occurred", str(e))))
         finally:
             if not app.main_window.visible:
                 mw.show()
