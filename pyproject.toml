@@ -1,7 +1,8 @@
 [project]
 name = "liveability"
-description = "Template for an application"
+description = "Compare locations by their nearby services"
 dependencies = [
+    "httpx",
     "markdown",
     "peewee",
     "tomlkit"
@@ -10,7 +11,7 @@ dependencies = [
 [tool.stub_launcher]
 display_name = "Liveability"  # Overrides the folder/project name in the list
 entry_point = "src/liveability/__main__.py"          # The script file the launcher should execute
-#icon = "assets/custom_icon.png"       # Relative path to this prototype's icon
+icon = "assets/custom_icon.png"       # Relative path to this prototype's icon
 
 # This project was generated with 0.4.2 using template: https://github.com/beeware/briefcase-template @ v0.4.2
 [tool.briefcase]
@@ -25,8 +26,9 @@ author_email = "jkingok@users.noreply.github.com"
 
 [tool.briefcase.app.liveability]
 formal_name = "Liveability"
-description = "Template for an application"
-long_description = """More details about the app should go here.
+description = "Compare locations by their nearby services"
+long_description = """Use Apple Maps to rank locations by their liveability.
+Tell us the services you care about the locations you want to rank.
 """
 sources = [
     "src/liveability",
@@ -36,7 +38,9 @@ test_sources = [
 ]
 
 requires = [
+    "httpx",
     "markdown",
+    "peewee",
     "tomlkit"
 ]
 test_requires = [

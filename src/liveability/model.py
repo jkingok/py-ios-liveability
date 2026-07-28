@@ -76,7 +76,7 @@ class RouteGenerator:
             self._notify_ui(is_busy=True)
             toga.App.app.loop.call_soon(self._do_queue)
 
-    def _do_queue(self) -> None:
+    async def _do_queue(self) -> None:
         """Background thread executing the route calculations."""
         if not self._queue.empty():
             address, service = self._queue.get()
@@ -85,13 +85,13 @@ class RouteGenerator:
             self._notify_ui(is_busy=True)
 
             # --- YOUR GEOSPATIAL LOGIC PLACEHOLDER ---
-            self._compute_and_save_route(address, service)
+            await self._compute_and_save_route(address, service)
             # ------------------------------------------
 
             #self._queue.task_done()
 
             # Broadcast progress step
-            self._notify_ui(is_busy=True)
+            #self._notify_ui(is_busy=True)
 
         self._ensure_worker_running()
 
@@ -104,7 +104,7 @@ class RouteGenerator:
                 d.Address.select().count() * d.Service.select().count()
             )
 
-    def _compute_and_save_route(self, address: Address, service: Service) -> None:
+    async def _compute_and_save_route(self, address: Address, service: Service) -> None:
         def step1(result, value, a, s):
             if isinstance(value, ObjCClass('MKMapItem')):
                 def step2(result, value, a, s, t, ms):
@@ -146,4 +146,4 @@ class RouteGenerator:
                 self._queue.task_done()
                 self._notify_ui(is_busy=False)
                 self._ensure_worker_running()
-        g.perform_search_at(service.title, address.latitude, address.longitude, lambda r, o=None, a=address, s=service: step1(r, o, a, s))
+        await g.perform_search_at(service.title, address.latitude, address.longitude, lambda r, o=None, a=address, s=service: step1(r, o, a, s))

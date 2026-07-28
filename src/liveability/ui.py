@@ -9,9 +9,9 @@ and "Help" (rendered Markdown documentation webview).
 import asyncio
 import ctypes
 import datetime as dt
+import httpx
 from markdown import markdown as md
 from pathlib import Path
-import requests
 from rubicon.objc import ObjCClass, ObjCInstance, Block
 from rubicon.objc.runtime import load_library, objc_id
 from rubicon.objc.types import ctype_for_encoding
@@ -50,22 +50,21 @@ class Prototype:
         #self.app.services = m.ServiceModel(host_app.paths, self.app.functions)
         #self.app.comparisons = m.ComparisonModel(host_app.paths, self.app.functions)
         self.data_path = self.app.paths.data
-        d.init(self.data_path / f"{self.title}.db") # set up DB
         self.this_path = Path(__file__).resolve().parent
         self.icon_path = self.this_path / "resources" / "icons"
         self.template_path = self.this_path / "resources" / "templates"
+        d.init(self.data_path / f"{self.title}.db") # set up DB
         self.app.routes = m.RouteGenerator()
         self.app.routes.on_progress_update = self.progress_update
-        self.app.routes.trigger_full_recalculate()
+        asyncio.create_task(self.app.routes.trigger_full_recalculate)
 
-    async def todo(self, name: str):
-        """
-        Displays a placeholder info dialog for pending features.
+    def _error(self, title, text):
+        print(f"⚠ {title}: {text}")
+        asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog(str(title), str(text))))
 
-        :param name: Feature name string.
-        :type name: str
-        """
-        await self.app.main_window.dialog(toga.InfoDialog("TODO", name))
+    def _info(self, title, text):
+        print(f"ℹ {title}: {text}")
+        asyncio.create_task(self.app.main_window.dialog(toga.InfoDialog(str(title), str(text))))
 
     def open_address_in_maps(self, row):
         """
@@ -75,7 +74,7 @@ class Prototype:
         """
         g.open_in_maps([(row._instance.latitude, row._instance.longitude, row.title)])
 
-    def add_address(self, text: str = None, url: str = None):
+    async def add_address(self, text: str = None, url: str = None):
         """
         Geocodes a search string or resolves a Apple Maps URL to save a new target address.
 
@@ -85,55 +84,56 @@ class Prototype:
         :type url: str | None
         """
         def record_item(mi):
-            print(f"Adding {str(mi.name)}...")
             d.Address.create(
                 title=str(mi.name),
                 subtitle=str(mi.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True)),
                 latitude=mi.location.coordinate.latitude,
                 longitude=mi.location.coordinate.longitude
             )
-            asyncio.create_task(self.app.main_window.dialog(toga.InfoDialog("Address Added", str(mi.name))))
+            self._info("Address Added", str(mi.name))
 
         def geocoded(r: objc_id, e: objc_id) -> None:
             if e:
-                asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure", ObjCInstance(e).localizedDescription)))
+                self._error("Search Failure", ObjCInstance(e).localizedDescription)
             else:
                 l = list(ObjCInstance(r))
                 if len(l) == 1:
                     record_item(l[0])
                 else:
-                    asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure", "Could not determine address")))
+                    self._error("Search Failure", "Could not determine address")
                     record_item(b.MKMapItem.alloc().initWithLocation(loc))
 
         if url:
             pu = urllib.parse.urlparse(url)
             if pu.netloc in ['maps.apple', 'maps.app.goo.gl']:
                 try:
-                    response = requests.get(url, allow_redirects=True)
-                    self.add_address(url=response.url)
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        response = await client.get(url, allow_redirects=True)
+                        response.raise_for_status()
+                        await self.add_address(url=response.url)
                 except Exception as e:
-                    print(f"Error resolving short URL: {e}")
+                    self._error("URL Error", f"Could not get short URL: {e}")
             elif pu.netloc == 'maps.apple.com':
                 p = urllib.parse.parse_qs(pu.query)
                 loc = b.CLLocation.alloc().initWithLatitude(float((ll := p['coordinate'][0].split(','))[0]), longitude=float(ll[1]))
                 rgr = b.MKReverseGeocodingRequest.alloc().initWithLocation(loc)
                 rgr.getMapItemsWithCompletionHandler(geocoded)
             else:
-                asyncio.create_task(self.app.main_window.dialog(toga.ErrorDialog("Search Failure", "Cannot extract location from URL")))
+                self._error("Search Failure", "Cannot extract location from URL")))
         else:
             gr = b.MKGeocodingRequest.alloc().initWithAddressString(text)
             gr.getMapItemsWithCompletionHandler(geocoded)
 
-    def add_by_name(self, title: str, name: str):
+    async def add_by_name(self, title: str, name: str):
         """
         Callback handler for adding an address by natural language string name.
 
         :param title: Alert action title.
         :param name: Input address string.
         """
-        self.add_address(text=name)
+        await self.add_address(text=name)
 
-    def add_by_paste(self, title: str, name: str):
+    async def add_by_paste(self, title: str, name: str):
         """
         Callback handler for adding an address from system clipboard pasteboard contents.
 
@@ -141,9 +141,9 @@ class Prototype:
         :param name: Clipboard text fallback.
         """
         if (pb := b.UIPasteboard.generalPasteboard).hasURLs and pb.URL and (u := pb.URL.absoluteString):
-            self.add_address(url=str(u))
+            await self.add_address(url=str(u))
         elif pb.hasStrings and (s := pb.string):
-            self.add_address(text=str(s))
+            await self.add_address(text=str(s))
 
     def ask_for_address(self):
         """
@@ -378,9 +378,9 @@ class Prototype:
             ],
         )
       except Exception as e:
-        self.app.main_window.dialog(toga.InfoDialog(str(e), str(traceback.format_exc())))
-        print(traceback.format_exc())
- 
+        traceback.print_exc()
+        self._error("UI Error", f"{str(e)}, see log.")
+
     def progress_update(self, is_busy, done, total):
         if "app_activity" in self.app.widgets:
             self.app.widgets["app_activity"].update("Busy" if is_busy else "Ready", is_busy)
@@ -390,4 +390,3 @@ class Prototype:
             else:
                 self.app.widgets["app_progress"].start(total)
                 self.app.widgets["app_progress"].update(done)
-

@@ -8,9 +8,10 @@ and checks the iOS user sandbox (`~/Documents/patch_app.py`) for live runtime ov
 import os
 from pathlib import Path
 import sys
+import toga
 import traceback
 
-import toga
+from . import ui
 
 class LogRedirector:
     """
@@ -22,7 +23,7 @@ class LogRedirector:
     def __init__(self, log_path):
         Path(log_path).parent.mkdir(parents=True, exist_ok=True)
         self.log_file = open(log_path, "a", encoding="utf-8", buffering=1)
-        self.terminal = sys.__stdout__
+        self.terminal = sys.__stdout__ # both out and err end up in out
 
     def write(self, message: str) -> None:
         """
@@ -41,10 +42,6 @@ class LogRedirector:
         self.terminal.flush()
         self.log_file.flush()
 
-
-from . import ui
-
-
 class MyApp(toga.App):
     """
     Main Toga Application instance for Liveability.
@@ -59,10 +56,10 @@ class MyApp(toga.App):
         :param fresh: True if creating the MainWindow for the first time.
         :type fresh: bool
         """
-        try:
-            if fresh:
-                app.main_window = toga.MainWindow(title=app.formal_name)
+        if fresh:
+            app.main_window = toga.MainWindow(title=app.formal_name)
 
+        try:
             app.proto = ui.Prototype(host_app=app, on_done=lambda _: MyApp.unstack_from(app))
 
             t = getattr(app.proto, "title", app.formal_name)
@@ -74,7 +71,8 @@ class MyApp(toga.App):
             mw.title = t
             mw.content = app.proto.get_content()
         except Exception as e:
-            print(f"Exception occurred creating UI: {str(e)}")
+            traceback.print_exc()
+            app.main_window.dialog(toga.ErrorDialog("Error Occurred", str(e)))
         finally:
             if not app.main_window.visible:
                 mw.show()
@@ -112,6 +110,8 @@ def bootstrap_application():
     :returns: Application instance or result of `patch_app.main()`.
     :rtype: toga.App
     """
+
+    # This is equivalent to the toga.App.app.paths.data
     user_documents_dir = Path("~/Documents").expanduser()
     user_documents_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,25 +124,24 @@ def bootstrap_application():
     readme = user_documents_dir / "README"
     if not readme.exists():
         try:
-            readme.write_text("Use this folder for logging and customising this app.")
+            readme.write_text("This folder is used for logging and customising this app.")
         except Exception as e:
             print(f"Failed to write placeholder: {e}")
 
     hot_patch_file = user_documents_dir / "patch_app.py"
 
     if hot_patch_file.exists():
-        print(f"??? Hot-Patch Intercepted on Device Storage: {hot_patch_file}")
+        print(f"Hot-Patch Intercepted on Device Storage: {hot_patch_file}")
         try:
             sys.path.insert(0, str(user_documents_dir))
             import patch_app
-            print("??? Hot-patch workspace parsed and executed flawlessly.")
+            print("Hot-patch workspace parsed and executed flawlessly.")
             return patch_app.main()
         except Exception as e:
-            print(f"??? Hot-patch execution runtime failure: {e}")
-            print("??? Gracefully routing application boot back to compiled factory core...")
+            print(f"Hot-patch execution runtime failure: {e}")
+            print("Gracefully routing application boot back to compiled factory core...")
 
     return MyApp()
-
 
 def main():
     """

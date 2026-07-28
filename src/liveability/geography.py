@@ -47,7 +47,19 @@ def open_in_maps(items: list[tuple[float, float, str]], mode=None) -> bool:
             lo[k] = v
     return b.MKMapItem.openMapsWithItems([ MKMapItemMake(*item) for item in items ], launchOptions=lo)
 
-def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
+def generic_completion(response_ptr, error_ptr, future):
+     if error_ptr:
+         error = ObjCInstance(error_ptr)
+         loop.call_soon_threadsafe(
+             future.set_exception, RuntimeError(str(error.localizedDescription))
+         }
+     else:
+         response = ObjCInstance(response_ptr)
+         loop.call_soon_threadsafe(
+             future.set_result, response
+         )
+
+async def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
     """
     Executes an asynchronous MapKit local search around specified coordinates.
 
@@ -82,9 +94,20 @@ def perform_search_at(search_string: str, latitude: float, longitude: float, cal
                     print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if item.addressRepresentations else "?"}")
                 callback(mapItems[0].name, mapItems[0])
 
-    # 3. Initialize the search and kick it off
-    b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(Block(search_callback, None, objc_id, objc_id))
-
+    try:
+        # 3. Initialize the search and kick it off
+        future = asyncio.get_running_loop().create_future()
+        b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
+            Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
+        )
+        mapItems = list(await future.mapItems)
+        if len(mapItems) > 0:
+            print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name]}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
+            callback(mapItems[0].name, mapItems[0])
+        else:
+            callback("Search returned no results", None)
+    except Exception as e:
+        callback("Search failed: str{e}, e)
 
 def perform_eta(fro, to, mode: str, callback) -> None:
     """
