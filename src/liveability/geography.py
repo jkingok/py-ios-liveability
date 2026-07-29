@@ -59,7 +59,7 @@ def generic_completion(response_ptr, error_ptr, future):
              future.set_result, response
          )
 
-async def perform_search_at(search_string: str, latitude: float, longitude: float, callback) -> None:
+async def perform_search_at(search_string: str, latitude: float, longitude: float) -> tuple[str, ObjCInstance | None]:
     """
     Executes an asynchronous MapKit local search around specified coordinates.
 
@@ -78,38 +78,21 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
 
     request.region = b.MKCoordinateRegionMakeWithDistance(b.CLLocationCoordinate2DMake(latitude, longitude), 10000.0, 10000.0)
 
-    # 2. Define the target callback function
-    def search_callback(response_ptr: objc_id, error_ptr: objc_id) -> None:
-        if error_ptr:
-            error = ObjCInstance(error_ptr)
-            callback(f"Search failed: {error.localizedDescription}", error)
-        else:
-            response = ObjCInstance(response_ptr)
-            mapItems = list(response.mapItems)
-            if len(mapItems) > 0:
-                print(f"Found {len(mapItems)} result(s):")
+    # 2. Initialize the search and kick it off
+    future = asyncio.get_running_loop().create_future()
+    b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
+        Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
+    )
+    mapItems = list(await future.mapItems)
+    if len(mapItems) == 0:
 
-                # Loop through native search results
-                for item in mapItems:
-                    print(f" - {item.name}: {item.addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if item.addressRepresentations else "?"}")
-                callback(mapItems[0].name, mapItems[0])
+    if len(mapItems) > 0:
+        print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
+        return (mapItems[0].name, mapItems[0])
+    else:
+        return ("Search returned no results", None)
 
-    try:
-        # 3. Initialize the search and kick it off
-        future = asyncio.get_running_loop().create_future()
-        b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
-            Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
-        )
-        mapItems = list(await future.mapItems)
-        if len(mapItems) > 0:
-            print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
-            callback(mapItems[0].name, mapItems[0])
-        else:
-            callback("Search returned no results", None)
-    except Exception as e:
-        callback("Search failed: str{e}", e)
-
-def perform_eta(fro, to, mode: str, callback) -> None:
+async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance, mode: str) -> tuple[str, ObjCInstance]:
     """
     Calculates estimated travel time and distance between two points using Apple MapKit directions.
 
@@ -142,18 +125,18 @@ def perform_eta(fro, to, mode: str, callback) -> None:
     request.transportType = mode_nums[mode]  # 1 = Driving, 2 = Walking
     request.requestsAlternateRoutes = False
 
-    directions_calculator = b.MKDirections.alloc().initWithRequest(request)
-
-    # Define the Objective-C completion block wrapper
-    def completion_handler(response_id, error_id):
-        if error_id:
-            error = ObjCInstance(error_id)
-            callback(f"Directions failed: {error.localizedDescription}")
-        elif response_id:
-            response = ObjCInstance(response_id)
-            minutes = (int(response.expectedTravelTime / 60), str(time_formatter.stringFromTimeInterval(response.expectedTravelTime)))
-            metres = (int(response.distance / 1000), str(dist_formatter.stringFromDistance(response.distance)))
-            callback(f"By {mode} in {minutes[1]} and {metres[1]}", response)
-
     # Call Apple servers asynchronously
-    directions_calculator.calculateETAWithCompletionHandler(Block(lambda r, e: completion_handler(r, e), None, objc_id, objc_id))
+    directions_calculator = b.MKDirections.alloc().initWithRequest(request)
+    future = asyncio.get_running_loop().create_future()
+    b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
+        Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
+    )
+    mapItems = list(await future.mapItems)
+
+    directions_calculator.calculateETAWithCompletionHandler(
+        Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
+    )
+    response = await future
+    minutes = (int(response.expectedTravelTime / 60), str(time_formatter.stringFromTimeInterval(response.expectedTravelTime)))
+    metres = (int(response.distance / 1000), str(dist_formatter.stringFromDistance(response.distance)))
+    return (f"By {mode} in {minutes[1]} and {metres[1]}", response)
