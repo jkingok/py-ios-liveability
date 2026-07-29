@@ -316,7 +316,7 @@ class Prototype:
                         ws.DynamicMapView(
                             d.DBListSource(d.Address.select()),
                             zoom=7,
-                            # TODO on_select=lambda w, pin: self.app.widgets["stack_list"].push(ViewAddressBox("stack_list", i := self.app.addresses.items_list_source[int(pin.title) - 1].index, v := self.app.addresses.get(i), self.app.comparisons.get(v.title))),
+                            on_select=lambda w, pin: self.app.widgets["stack_list"].push(ViewAddressBox(row, "stack_list")) if (row := w.row_of_pin(pin)) else None,
                             flex=1
                         ),
                         toga.Row(

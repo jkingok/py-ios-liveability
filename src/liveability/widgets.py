@@ -40,6 +40,7 @@ class DynamicMapView(toga.MapView):
         self.fixed_pins = fixed_pins if fixed_pins else []
 
         self._pin_map: dict[int, toga.MapPin] = {}
+        self._pin_src = {}
         self._data: ListSource | None = data
 
         if data is not None:
@@ -85,6 +86,9 @@ class DynamicMapView(toga.MapView):
             subtitle=row.subtitle
         )
 
+    def row_of_pin(self, pin):
+        return self._pin_src[i] if (i := id(pin)) in self._pin_src else None 
+
     # --- Toga Source Listener Hooks ---
 
     def source_clear(self) -> None:
@@ -98,6 +102,7 @@ class DynamicMapView(toga.MapView):
         """Single item added."""
         pin = self._create_pin_from_row(item)
         self._pin_map[id(item)] = pin
+        self._pin_src[id(pin)] = item
         self.pins.add(pin)
 
         self._recalculate_centre()
@@ -107,6 +112,7 @@ class DynamicMapView(toga.MapView):
         row_key = id(item)
         if row_key in self._pin_map:
             pin = self._pin_map.pop(row_key)
+            self._pin_set.pop(id(item))
             self.pins.remove(pin)
 
         self._recalculate_centre()
@@ -117,11 +123,13 @@ class DynamicMapView(toga.MapView):
         if row_key in self._pin_map:
             # Remove old pin representation
             old_pin = self._pin_map.pop(row_key)
+            self._pin_set.pop(id(item))
             self.pins.remove(old_pin)
 
         # Insert updated pin representation
         new_pin = self._create_pin_from_row(item)
         self._pin_map[row_key] = new_pin
+        self._pin_src[id(new_pin)] = item
         self.pins.add(new_pin)
 
         self._recalculate_centre()
