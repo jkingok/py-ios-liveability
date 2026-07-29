@@ -5,6 +5,8 @@ from peewee import SqliteDatabase, Proxy, Select, CompositeKey, CharField, Field
 from playhouse.signals import Model, post_delete, post_save
 from typing import Any, Callable
 
+from . import geography as g
+
 db_ref = Proxy()
 mgr = None
 
@@ -129,7 +131,7 @@ class Route(BaseModel):
 
     @property
     def subtitle(self) -> str:
-        return f"⚠ {self.error}" if self.error else f"By {self.mode} in {self.time}s for {self.distance}m"
+        return f"⚠ {self.error}" if self.error else g.format_eta(str(self.mode), self.time, self.distance)
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:

@@ -5,8 +5,10 @@ Performs asynchronous spatial queries via Apple MapKit (`MKLocalSearch`), calcul
 travel time estimates (`MKDirectionsRequest`), and launches target locations in Apple Maps (`MKMapItem`).
 """
 
+import asyncio
 from rubicon.objc import Block, ObjCClass, ObjCInstance
 from rubicon.objc.runtime import objc_id
+import toga
 
 from . import bridge as b
 
@@ -48,16 +50,33 @@ def open_in_maps(items: list[tuple[float, float, str]], mode=None) -> bool:
     return b.MKMapItem.openMapsWithItems([ MKMapItemMake(*item) for item in items ], launchOptions=lo)
 
 def generic_completion(response_ptr, error_ptr, future):
-     if error_ptr:
-         error = ObjCInstance(error_ptr)
-         loop.call_soon_threadsafe(
-             future.set_exception, RuntimeError(str(error.localizedDescription))
-         )
-     else:
-         response = ObjCInstance(response_ptr)
-         loop.call_soon_threadsafe(
-             future.set_result, response
-         )
+    if future.done():
+        return
+  
+    if error_ptr:
+        error = ObjCInstance(error_ptr)
+        toga.App.app.loop.call_soon_threadsafe(
+            future.set_exception, RuntimeError(str(error.localizedDescription))
+        )
+    else:
+        response = ObjCInstance(response_ptr)
+        toga.App.app.loop.call_soon_threadsafe(
+            future.set_result, response
+        )
+
+def format_eta(mode: str, time: float, distance: float) -> None:
+    # Initialize Formatters for elegant localise-aware outputs
+    dist_formatter = b.MKDistanceFormatter.alloc().init()
+    dist_formatter.unitsStyle = 1  # Abbreviated (e.g., "km", "m")
+
+    time_formatter = b.NSDateComponentsFormatter.alloc().init()
+    time_formatter.unitsStyle = 1  # Abbreviated (e.g., "hr", "min")
+    time_formatter.allowedUnits = (1 << 5) | (1 << 6)  # Hour | Minute
+
+    minutes = str(time_formatter.stringFromTimeInterval(time))
+    metres = str(dist_formatter.stringFromDistance(distance))
+
+    return f"By {mode} in {minutes} and {metres}"
 
 async def perform_search_at(search_string: str, latitude: float, longitude: float) -> tuple[str, ObjCInstance | None]:
     """
@@ -69,8 +88,6 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
     :type latitude: float
     :param longitude: Center longitude for search region in decimal degrees.
     :type longitude: float
-    :param callback: Function invoked with `(result_title, map_item)` upon search completion.
-    :type callback: callable
     """
     # 1. Set up the request
     request = b.MKLocalSearchRequest.alloc().init()
@@ -79,18 +96,15 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
     request.region = b.MKCoordinateRegionMakeWithDistance(b.CLLocationCoordinate2DMake(latitude, longitude), 10000.0, 10000.0)
 
     # 2. Initialize the search and kick it off
-    future = asyncio.get_running_loop().create_future()
+    future = toga.App.app.loop.create_future()
     b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
         Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
     )
-    mapItems = list(await future.mapItems)
+    mapItems = list((await future).mapItems)
     if len(mapItems) == 0:
-
-    if len(mapItems) > 0:
-        print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
-        return (mapItems[0].name, mapItems[0])
-    else:
         return ("Search returned no results", None)
+    print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
+    return (mapItems[0].name, mapItems[0])
 
 async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance, mode: str) -> tuple[str, ObjCInstance]:
     """
@@ -102,17 +116,7 @@ async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance,
     :type to: ObjCClass('MKMapItem')
     :param mode: Transport mode emoji ('🥾' for walking, '🚲' for cycling, '🚌' for transit, '🚗' for driving).
     :type mode: str
-    :param callback: Function invoked with `(formatted_string, eta_response)` upon completion.
-    :type callback: callable
     """
-    # Initialize Formatters for elegant localise-aware outputs
-    dist_formatter = b.MKDistanceFormatter.alloc().init()
-    dist_formatter.unitsStyle = 1  # Abbreviated (e.g., "km", "m")
-
-    time_formatter = b.NSDateComponentsFormatter.alloc().init()
-    time_formatter.unitsStyle = 1  # Abbreviated (e.g., "hr", "min")
-    time_formatter.allowedUnits = (1 << 5) | (1 << 6)  # Hour | Minute
-
     # Start with a walking route
     mode_nums = {'🚲': 8, '🚌': 4, '🥾': 2, '🚗': 1}
     request = b.MKDirectionsRequest.alloc().init()
@@ -121,22 +125,18 @@ async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance,
         request.source = b.MKMapItem.alloc().initWithLocation(c, address=None)
     else:
         request.source = fro
+    if not isinstance(to, ObjCClass('MKMapItem')):
+        raise ValueError(to)
     request.destination = to
     request.transportType = mode_nums[mode]  # 1 = Driving, 2 = Walking
     request.requestsAlternateRoutes = False
 
     # Call Apple servers asynchronously
     directions_calculator = b.MKDirections.alloc().initWithRequest(request)
-    future = asyncio.get_running_loop().create_future()
-    b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
-        Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
-    )
-    mapItems = list(await future.mapItems)
-
+    future = toga.App.app.loop.create_future()
     directions_calculator.calculateETAWithCompletionHandler(
         Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
     )
     response = await future
-    minutes = (int(response.expectedTravelTime / 60), str(time_formatter.stringFromTimeInterval(response.expectedTravelTime)))
-    metres = (int(response.distance / 1000), str(dist_formatter.stringFromDistance(response.distance)))
-    return (f"By {mode} in {minutes[1]} and {metres[1]}", response)
+
+    return (format_eta(mode, response.expectedTravelTime, response.distance), response)

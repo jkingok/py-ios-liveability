@@ -13,6 +13,7 @@ from queue import Queue
 from rubicon.objc import ObjCClass
 import toga
 from toga.sources import ListSource
+import traceback
 
 from . import db as d
 from . import geography as g
@@ -74,7 +75,7 @@ class RouteGenerator:
     def _ensure_worker_running(self) -> None:
         if not self._queue.empty():
             self._notify_ui(is_busy=True)
-            toga.App.app.loop.call_soon(self._do_queue)
+            toga.App.app.loop.create_task(self._do_queue())
 
     async def _do_queue(self) -> None:
         """Background thread executing the route calculations."""
@@ -89,6 +90,7 @@ class RouteGenerator:
                 d.Route.replace(**await self._compute_and_save_route(address, service)).execute()
                 # ------------------------------------------
             except Exception as e:
+                traceback.print_exc()
                 d.Route.replace(
                     address=address,
                     service=service,
@@ -112,16 +114,17 @@ class RouteGenerator:
         # Find the first matching service for the location
         destination = await g.perform_search_at(service.title, address.latitude, address.longitude)
         if destination:
+            print(destination)
             for m in '🥾🚲🚗':
-                eta = g.perform_eta((address.latitude, address.longitude), destination, m)
-                if value.expectedTravelTime < 11 * 60 or m == '🚗':
+                eta = await g.perform_eta((address.latitude, address.longitude), destination[1], m)
+                if eta[1].expectedTravelTime < 11 * 60 or m == '🚗':
                     return {
                         'address': address,
                         'service': service,
-                        'latitude': destination.location.coordinate.latitude,
-                        'longitude': destination.location.coordinate.longitude,
-                        'distance': eta.distance,
-                        'time': eta.expectedTravelTime,
+                        'latitude': destination[1].location.coordinate.latitude,
+                        'longitude': destination[1].location.coordinate.longitude,
+                        'distance': eta[1].distance,
+                        'time': eta[1].expectedTravelTime,
                         'mode': d.TravelMode.from_label(m),
                         'error': None
                     }

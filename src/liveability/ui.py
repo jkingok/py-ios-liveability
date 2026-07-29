@@ -149,7 +149,7 @@ class Prototype:
         """
         Displays a native iOS input dialog prompting the user for an address or paste action.
         """
-        ws.Utils.ask_for_input(self.app, "Add Address", "Enter an address, search term or tap to Paste", [("Add", self.add_by_name), ("Paste", self.add_by_paste), ("Cancel",)], 1)
+        ws.Utils.ask_for_input(self.app, "Add Address", "Enter an address, search term or tap to Paste", [("Add", lambda t, n: asyncio.create_task(self.add_by_name(t, n))), ("Paste", lambda t, n: asyncio.create_task(self.add_by_paste(t, n))), ("Cancel",)], 1)
 
     def add_service(self, title: str, name: str, emoji: str):
         """
@@ -198,17 +198,20 @@ class Prototype:
                             value_text=row.subtitle,
                             readonly=True
                         ),
-                        toga.MapView(
+                        ws.DynamicMapView(
+                            d.DBListSource(d.Route.select().where((d.Route.address == row._instance) & (d.Route.latitude != None) & (d.Route.longitude != None))),
+                            False,
+                            [toga.MapPin((row._instance.latitude, row._instance.longitude), title="🏠")],
                             id="view_address_box_map",
                             flex=1,
                             location=(ll := (row._instance.latitude, row._instance.longitude)),
-                            zoom=15,
-                            pins=[toga.MapPin(ll, title="🏠"), *[ toga.MapPin((r.latitude, r.longitude), title=r.title) for r in row._instance.routes ]]
+                            zoom=15
                         ),
                         toga.DetailedList(
                             flex=1,
                             primary_action="View",
                             on_primary_action=lambda w, row: self.open_directions_in_maps(row),
+                            on_refresh=lambda w: (d.Route.delete().where(d.Route.address == row._instance).execute(), self.app.loop.call_soon(self.app.routes.trigger_full_recalculate)),
                             on_select=lambda w: setattr(self.app.widgets["view_address_box_map"], "location", (w.selection._instance.latitude, w.selection._instance.longitude)),
                             data=d.DBListSource(model_or_query=row._instance.routes)
                         ),

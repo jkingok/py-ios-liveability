@@ -30,17 +30,22 @@ class DynamicMapView(toga.MapView):
         self,
         data: ListSource | None = None,
         auto_center: bool = True,
+        fixed_pins: list[toga.MapPin] | None = None, 
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
 
         self.auto_center = auto_center
+        
+        self.fixed_pins = fixed_pins if fixed_pins else []
 
         self._pin_map: dict[int, toga.MapPin] = {}
         self._data: ListSource | None = data
 
         if data is not None:
             #self.source_change(data)
+            for p in self.fixed_pins:
+                self.pins.add(p)
             for row in data:
                 self.source_insert(None, row)
             data.add_listener(self)
@@ -86,6 +91,8 @@ class DynamicMapView(toga.MapView):
         """Reset of source data."""
         self.pins.clear()
         self._pin_map.clear()
+        for p in self.fixed_pins:
+            self.pins.add(p)
 
     def source_insert(self, index: int, item) -> None:
         """Single item added."""
