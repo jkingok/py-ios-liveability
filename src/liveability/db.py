@@ -115,6 +115,8 @@ class Route(BaseModel):
     longitude = FloatField(null=True)
     distance = FloatField(null=True) # metres
     time = IntegerField(null=True) # seconds
+    distance_return = FloatField(null=True)
+    time_return = FloatField(null=True)
     mode = EnumField(TravelMode, value_attr="code", null=True)
     error = CharField(null=True)
 
@@ -131,7 +133,7 @@ class Route(BaseModel):
 
     @property
     def subtitle(self) -> str:
-        return f"⚠ {self.error}" if self.error else g.format_eta(str(self.mode), self.time, self.distance)
+        return f"⚠ {self.error}" if self.error else g.format_eta(str(self.mode), self.time, self.distance, self.time_return, self.distance_return)
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:

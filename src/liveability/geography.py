@@ -64,7 +64,7 @@ def generic_completion(response_ptr, error_ptr, future):
             future.set_result, response
         )
 
-def format_eta(mode: str, time: float, distance: float) -> None:
+def format_eta(mode: str, time: float, distance: float, time2: float | None = None, distance2: float | None = None) -> None:
     # Initialize Formatters for elegant localise-aware outputs
     dist_formatter = b.MKDistanceFormatter.alloc().init()
     dist_formatter.unitsStyle = 1  # Abbreviated (e.g., "km", "m")
@@ -76,7 +76,12 @@ def format_eta(mode: str, time: float, distance: float) -> None:
     minutes = str(time_formatter.stringFromTimeInterval(time))
     metres = str(dist_formatter.stringFromDistance(distance))
 
-    return f"By {mode} in {minutes} and {metres}"
+    if (time2 is not None) and (distance2 is not None) and ((time3 := abs(time2 - time)) > 60) and (((distance3 := abs(distance2 - distance)) / distance) > 0.1):
+        minutes2 = str(time_formatter.stringFromTimeInterval(time3))
+        metres2 = str(dist_formatter.stringFromDistance(distance3))
+        return f"By {mode} in {minutes} ({'+' if time3 > 0 else '-'}{minutes2}) and {metres} ({'+' if distance3 > 0 else '-'}{metres2}"
+    else:
+        return f"By {mode} in {minutes} and {metres}"
 
 async def perform_search_at(search_string: str, latitude: float, longitude: float) -> tuple[str, ObjCInstance | None]:
     """
@@ -106,7 +111,7 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
     print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
     return (mapItems[0].name, mapItems[0])
 
-async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance, mode: str) -> tuple[str, ObjCInstance]:
+async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance | tuple[float, float], mode: str, both: bool = False) -> tuple[str, ObjCInstance]:
     """
     Calculates estimated travel time and distance between two points using Apple MapKit directions.
 
@@ -126,8 +131,10 @@ async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance,
     else:
         request.source = fro
     if not isinstance(to, ObjCClass('MKMapItem')):
-        raise ValueError(to)
-    request.destination = to
+        c = b.CLLocation.alloc().initWithLatitude(to[0], longitude=to[1])
+        request.destination = b.MKMapItem.alloc().initWithLocation(c, address=None) 
+    else:
+        request.destination = to
     request.transportType = mode_nums[mode]  # 1 = Driving, 2 = Walking
     request.requestsAlternateRoutes = False
 
@@ -138,5 +145,19 @@ async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance,
         Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
     )
     response = await future
-
-    return (format_eta(mode, response.expectedTravelTime, response.distance), response)
+    
+    if both:
+        forward = response
+    
+        # Now calculate return journey
+        request.source, request.destination = request.destination, request.source
+        
+        directions_calculator = b.MKDirections.alloc().initWithRequest(request)
+        future = toga.App.app.loop.create_future()
+        directions_calculator.calculateETAWithCompletionHandler(
+            Block(lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id)
+        )
+        reverse = await future
+        return (format_eta(mode, forward.expectedTravelTime, forward.distance, reverse.expectedTravelTime, reserve.distance), forward)
+    else: 
+        return (format_eta(mode, response.expectedTravelTime, response.distance), response)
