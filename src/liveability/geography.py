@@ -79,7 +79,7 @@ def format_eta(mode: str, time: float, distance: float, time2: float | None = No
     if (time2 is not None) and (distance2 is not None) and ((time3 := abs(time2 - time)) > 60) and (((distance3 := abs(distance2 - distance)) / distance) > 0.1):
         minutes2 = str(time_formatter.stringFromTimeInterval(time3))
         metres2 = str(dist_formatter.stringFromDistance(distance3))
-        return f"By {mode} in {minutes} ({'+' if time3 > 0 else '-'}{minutes2}) and {metres} ({'+' if distance3 > 0 else '-'}{metres2}"
+        return f"By {mode} in {minutes} ({'+' if time3 > 0 else '-'}{minutes2}) and {metres} ({'+' if distance3 > 0 else '-'}{metres2})"
     else:
         return f"By {mode} in {minutes} and {metres}"
 

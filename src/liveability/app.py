@@ -69,10 +69,11 @@ class MyApp(toga.App):
                     mw.content_stack = []
                 mw.content_stack.append((mw.title, mw.content))
             mw.title = t
-            mw.content = app.proto.get_content()
+            if (c := app.proto.get_content()):
+                mw.content = c
         except Exception as e:
             traceback.print_exc()
-            app.loop.call_soon(main_window.dialog(toga.ErrorDialog("Error Occurred", str(e))))
+            app.loop.call_soon(app.main_window.dialog(toga.ErrorDialog("Error Occurred", str(e))))
         finally:
             if not app.main_window.visible:
                 mw.show()

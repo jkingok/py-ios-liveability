@@ -1,7 +1,7 @@
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from peewee import SqliteDatabase, Proxy, Select, CompositeKey, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
+from peewee import SqliteDatabase, Proxy, Select, AutoField, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn, JOIN, Case
 from playhouse.signals import Model, post_delete, post_save
 from typing import Any, Callable
 
@@ -9,6 +9,13 @@ from . import geography as g
 
 db_ref = Proxy()
 mgr = None
+
+def count_to_emoji(count: int) -> str:
+    if count == 10:
+        return "🔟"
+    digit_map = {'0':'0️⃣', '1':'1️⃣', '2':'2️⃣', '3':'3️⃣', '4':'4️⃣',
+                 '5':'5️⃣', '6':'6️⃣', '7':'7️⃣', '8':'8️⃣', '9':'9️⃣'}
+    return "".join(digit_map[d] for d in str(count))
 
 class BaseModel(Model):
     class Meta:
@@ -23,6 +30,50 @@ class Address(BaseModel):
     @property
     def icon(self) -> None:
         return None
+        
+    @property
+    def summary(self):
+        """Formats the aggregated counts into a clean, readable one-liner."""
+        if not getattr(self, 'total_routes', 0):
+            return "🛑 No routes"
+
+        # Emoji mappings for non-zero counts
+        mode_map = [
+            (TravelMode.DRIVING.label, getattr(self, 'driving_count', 0)),
+            (TravelMode.TRANSITING.label, getattr(self, 'transiting_count', 0)),
+            (TravelMode.WALKING.label, getattr(self, 'walking_count', 0)),
+            (TravelMode.CYCLING.label, getattr(self, 'cycling_count', 0)),
+            ('⚠️', getattr(self, 'error_count', 0)),
+        ]
+
+        parts = [f"{count_to_emoji(count)}{emoji}" for emoji, count in mode_map if count > 0]
+        return " ".join(parts) if parts else self.__data__.get('subtitle') or ""
+ 
+
+    @classmethod
+    def get_summary_list(cls):
+        """Returns Address models with explicit mode and error counts attached."""
+        return (
+            cls
+            .select(
+                cls,
+                fn.COUNT(Route.id).alias('total_routes'),
+                fn.SUM(Case(None, [(Route.mode == TravelMode.DRIVING.code, 1)], 0)).alias('driving_count'),
+                fn.SUM(Case(None, [(Route.mode == TravelMode.TRANSITING.code, 1)], 0)).alias('transiting_count'),
+                fn.SUM(Case(None, [(Route.mode == TravelMode.WALKING.code, 1)], 0)).alias('walking_count'),
+                fn.SUM(Case(None, [(Route.mode == TravelMode.CYCLING.code, 1)], 0)).alias('cycling_count'),
+                # Flag rows where a Route exists but mode is NULL
+                fn.SUM(
+                    Case(
+                        None, 
+                        [((Route.id.is_null(False) & Route.mode.is_null(True)), 1)], 
+                        0
+                    )
+                ).alias('error_count')
+            )
+            .join(Route, JOIN.LEFT_OUTER, on=(cls.id == Route.address))
+            .group_by(cls.id)
+        )
 
 class Service(BaseModel):
     name = CharField()
@@ -109,6 +160,7 @@ class TravelMode(Enum):
         return self.label
 
 class Route(BaseModel):
+    id = AutoField()
     address = ForeignKeyField(Address, backref='routes', on_delete="CASCADE")
     service = ForeignKeyField(Service, backref='routes', on_delete="CASCADE")
     latitude = FloatField(null=True)
@@ -121,7 +173,7 @@ class Route(BaseModel):
     error = CharField(null=True)
 
     class Meta:
-        primary_key = CompositeKey("address", "service")
+        indexes = ((('address', 'service'), True),)
 
     @property
     def icon(self) -> None:
@@ -160,14 +212,20 @@ def init(db_path: Path | None = None) -> None:
 import toga
 from toga.sources import ListSource, Row
 
+from peewee import Model, Select
+from playhouse.signals import post_save, post_delete
+from toga.sources import ListSource
+from typing import Callable, Sequence
+
 class DBListSource(ListSource):
-    """A Toga ListSource backed by Peewee with live count notifications."""
+    """A Toga ListSource backed by Peewee with live count and relation updates."""
 
     def __init__(
         self, 
         model_or_query: type[Model] | Select, 
         accessors: list[str] | None = None,
-        on_count_change: Callable[[int], None] | None = None
+        on_count_change: Callable[[int], None] | None = None,
+        related_models: Sequence[type[Model]] | None = None
     ):
         if not accessors:
             accessors = ["title", "subtitle", "icon"]
@@ -181,16 +239,39 @@ class DBListSource(ListSource):
             self.query = model_or_query.select()
 
         self.on_count_change = on_count_change
+        self.related_models = related_models or []
 
-        # Wire signals to fine-grained update handlers
-        # Generate a unique ID for this instance (using id(self))
+        # Unique ID for signal dispatching
         dispatch_uid = f"{self.model_cls.__name__}_{id(self)}"
 
-        # Connect using dispatch_uid to allow multiple DBListSource instances
+        # 1. Connect primary model signals
         post_save.connect(self._on_post_save, sender=self.model_cls, name=f"{dispatch_uid}_save")
         post_delete.connect(self._on_post_delete, sender=self.model_cls, name=f"{dispatch_uid}_delete")
 
+        # 2. Connect secondary/joined model signals
+        for idx, rel_model in enumerate(self.related_models):
+            post_save.connect(
+                self._on_related_change, 
+                sender=rel_model, 
+                name=f"{dispatch_uid}_rel_{rel_model.__name__}_{idx}_save"
+            )
+            post_delete.connect(
+                self._on_related_change, 
+                sender=rel_model, 
+                name=f"{dispatch_uid}_rel_{rel_model.__name__}_{idx}_delete"
+            )
+            
+        self.reload_from_db() 
+
+    def _on_related_change(self, sender, instance, created=False):
+        """Handler triggered whenever a related model (e.g. Route) changes."""
+        # Option A: Full reload to refresh aggregate subqueries/counts
         self.reload_from_db()
+
+        # Option B (Targeted): If instance has FK back to primary model, reload targeted row
+        # foreign_key_val = getattr(instance, 'address_id', None)
+        # if foreign_key_val:
+        #     self.refresh_row_by_id(foreign_key_val)
 
     def _extract_data(self, instance: Model) -> dict[str, str]:
         """Utility to convert instance attributes into dictionary for ListSource."""

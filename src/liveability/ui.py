@@ -311,7 +311,8 @@ class Prototype:
                             secondary_action="Delete",
                             on_secondary_action=lambda w, row: row._instance.delete_instance(),
                             on_select=lambda w: self.app.widgets["stack_list"].push(ViewAddressBox(w.selection, "stack_list")),
-                            data=d.DBListSource(d.Address)
+                            accessors=('title', 'summary', 'icon'),
+                            data=d.DBListSource(d.Address.get_summary_list(), ['title', 'subtitle', 'summary', 'icon'], related_models=[d.Route])
                         ),
                         ws.DynamicMapView(
                             d.DBListSource(d.Address.select()),
