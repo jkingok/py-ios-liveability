@@ -98,7 +98,10 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
     request = b.MKLocalSearchRequest.alloc().init()
     request.naturalLanguageQuery = search_string
 
-    request.region = b.MKCoordinateRegionMakeWithDistance(b.CLLocationCoordinate2DMake(latitude, longitude), 10000.0, 10000.0)
+    fro = b.CLLocationCoordinate2DMake(latitude, longitude)
+    fro2 = b.CLLocation.alloc().initWithLatitude(latitude, longitude=longitude)
+    request.region = b.MKCoordinateRegionMakeWithDistance(fro, 10000.0, 10000.0)
+    request.regionPriority = 1 # MKLocalSearchRegionPriorityRequired
 
     # 2. Initialize the search and kick it off
     future = toga.App.app.loop.create_future()
@@ -108,8 +111,14 @@ async def perform_search_at(search_string: str, latitude: float, longitude: floa
     mapItems = list((await future).mapItems)
     if len(mapItems) == 0:
         return ("Search returned no results", None)
-    print(f"Found {len(mapItems)} result(s), first is {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
-    return (mapItems[0].name, mapItems[0])
+    elif len(mapItems) == 1:
+        print(f"Found single result {mapItems[0].name}: {mapItems[0].addressRepresentations.fullAddressIncludingRegion(False, singleLine=True) if mapItems[0].addressRepresentations else "?"}")
+        return (mapItems[0].name, mapItems[0])
+    else:
+        def get_distance(item):
+            return item.location.distanceFromLocation(fro2)
+        sorted_items = sorted(mapItems, key=get_distance)
+        return (sorted_items[0].name, sorted_items[0]) 
 
 async def perform_eta(fro: ObjCInstance | tuple[float, float], to: ObjCInstance | tuple[float, float], mode: str, both: bool = False) -> tuple[str, ObjCInstance]:
     """
