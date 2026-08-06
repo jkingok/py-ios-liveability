@@ -237,7 +237,7 @@ class Prototype:
                 """
                 fro = row._instance.address
                 to = row._instance
-                g.open_in_maps([(fro.latitude, fro.longitude, fro.title), (to.latitude, to.longitude, to.title)], str(to.mode))
+                ws.Utils.ask_for_input(self.app, "View Directions", "Select direction of travel", [("Outbound", lambda t: g.open_in_maps([(fro.latitude, fro.longitude, fro.title), (to.latitude, to.longitude, to.title)], str(to.mode))), ("Inbound", lambda t: g.open_in_maps([(to.latitude, to.longitude, to.title), (fro.latitude, fro.longitude, fro.title)], str(to.mode))), ("Cancel",)])
 
         class EditServiceBox(toga.Box):
             """
