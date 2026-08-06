@@ -3,7 +3,9 @@ from functools import lru_cache
 from pathlib import Path
 from peewee import SqliteDatabase, Proxy, Select, AutoField, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn, JOIN, Case
 from playhouse.signals import Model, post_delete, post_save
-from typing import Any, Callable
+import toga
+from toga.sources import ListSource, Row
+from typing import Any, Callable, Sequence
 
 from . import geography as g
 
@@ -39,16 +41,15 @@ class Address(BaseModel):
 
         # Emoji mappings for non-zero counts
         mode_map = [
-            (TravelMode.DRIVING.label, getattr(self, 'driving_count', 0)),
-            (TravelMode.TRANSITING.label, getattr(self, 'transiting_count', 0)),
             (TravelMode.WALKING.label, getattr(self, 'walking_count', 0)),
             (TravelMode.CYCLING.label, getattr(self, 'cycling_count', 0)),
+            (TravelMode.DRIVING.label, getattr(self, 'driving_count', 0)),
+            (TravelMode.TRANSITING.label, getattr(self, 'transiting_count', 0)),
             ('⚠️', getattr(self, 'error_count', 0)),
         ]
 
         parts = [f"{count_to_emoji(count)}{emoji}" for emoji, count in mode_map if count > 0]
         return " ".join(parts) if parts else self.__data__.get('subtitle') or ""
- 
 
     @classmethod
     def get_summary_list(cls):
@@ -209,23 +210,26 @@ def init(db_path: Path | None = None) -> None:
     global mgr
     mgr = _Manager(db_path)
 
-import toga
-from toga.sources import ListSource, Row
-
-from peewee import Model, Select
-from playhouse.signals import post_save, post_delete
-from toga.sources import ListSource
-from typing import Callable, Sequence
-
 class DBListSource(ListSource):
     """A Toga ListSource backed by Peewee with live count and relation updates."""
+    
+    @classmethod
+    def create_address_summary(cls, on_count_change=None):
+        return DBListSource(
+            Address.get_summary_list(),
+            ['title', 'summary', 'icon', 'subtitle'],
+            on_count_change,
+            [Route],
+            True
+        )  
 
     def __init__(
         self, 
         model_or_query: type[Model] | Select, 
         accessors: list[str] | None = None,
         on_count_change: Callable[[int], None] | None = None,
-        related_models: Sequence[type[Model]] | None = None
+        related_models: Sequence[type[Model]] | None = None,
+        watch_routes: bool = False
     ):
         if not accessors:
             accessors = ["title", "subtitle", "icon"]
@@ -260,7 +264,10 @@ class DBListSource(ListSource):
                 sender=rel_model, 
                 name=f"{dispatch_uid}_rel_{rel_model.__name__}_{idx}_delete"
             )
-            
+        
+        if watch_routes:
+            toga.App.app.routes.register(self.reload_from_db)
+        
         self.reload_from_db() 
 
     def _on_related_change(self, sender, instance, created=False):
@@ -331,7 +338,7 @@ class DBListSource(ListSource):
 
     def reload_from_db(self) -> None:
         self.clear()
-        for instance in self.query:
+        for instance in self.query.clone().iterator():
             row_data = {f: (getattr(instance, f) if getattr(instance, f) is not None else "") for f in self._accessors}
             row_data["_instance"] = instance
             # Bypassing explicit Row instantiation by appending dict directly

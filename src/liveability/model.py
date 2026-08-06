@@ -23,6 +23,7 @@ class RouteGenerator:
 
     def __init__(self) -> None:
         self._queue = Queue()
+        self._listeners = []
 
         # UI Callback hooks: fn(is_busy, current_progress, total_tasks)
         self.on_progress_update: Callable[[bool, int, int], None] | None = None
@@ -34,6 +35,9 @@ class RouteGenerator:
         # Connect using dispatch_uid to allow multiple DBListSource instances
         post_save.connect(self._on_address_save, sender=d.Address, name=f"{address_uid}_save")
         post_save.connect(self._on_service_save, sender=d.Service, name=f"{service_uid}_save")
+
+    def register(self, handler):
+        self._listeners.append(handler)
 
     def trigger_full_recalculate(self) -> None:
         """Queues all Address/Service pairs that don't yet have a Route."""
@@ -109,12 +113,13 @@ class RouteGenerator:
                 d.Route.select().count(),
                 d.Address.select().count() * d.Service.select().count()
             )
+        for handler in self._listeners:
+            handler() 
 
     async def _compute_and_save_route(self, address: Address, service: Service) -> dict:
         # Find the first matching service for the location
         destination = await g.perform_search_at(service.title, address.latitude, address.longitude)
         if destination:
-            print(destination)
             for m in '🥾🚲🚗':
                 eta = await g.perform_eta((address.latitude, address.longitude), destination[1], m)
                 if eta[1].expectedTravelTime < 11 * 60 or m == '🚗':
