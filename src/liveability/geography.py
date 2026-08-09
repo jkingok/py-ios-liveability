@@ -5,7 +5,6 @@ Performs asynchronous spatial queries via Apple MapKit (`MKLocalSearch`), calcul
 travel time estimates (`MKDirectionsRequest`), and launches target locations in Apple Maps (`MKMapItem`).
 """
 
-import asyncio
 from rubicon.objc import Block, ObjCClass, ObjCInstance
 from rubicon.objc.runtime import objc_id
 import toga
@@ -214,7 +213,7 @@ async def perform_eta(
                 forward.expectedTravelTime,
                 forward.distance,
                 reverse.expectedTravelTime,
-                reserve.distance,
+                reverse.distance,
             ),
             forward,
         )

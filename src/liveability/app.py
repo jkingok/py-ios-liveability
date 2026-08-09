@@ -5,7 +5,6 @@ Manages application startup (`MyApp`), redirects standard output/error to disk (
 and checks the iOS user sandbox (`~/Documents/patch_app.py`) for live runtime overrides.
 """
 
-import os
 from pathlib import Path
 import sys
 import toga

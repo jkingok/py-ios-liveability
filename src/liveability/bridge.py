@@ -6,8 +6,8 @@ required for geocoding, spatial searches, travel directions, date formatting, an
 """
 
 import ctypes
-from rubicon.objc import ObjCClass, ObjCInstance, Block
-from rubicon.objc.runtime import load_library, objc_id
+from rubicon.objc import ObjCClass, ObjCInstance
+from rubicon.objc.runtime import load_library
 from rubicon.objc.types import ctype_for_encoding
 
 

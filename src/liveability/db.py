@@ -18,7 +18,7 @@ from peewee import (
 from playhouse.signals import Model, post_delete, post_save
 import toga
 from toga.sources import ListSource, Row
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Self, Sequence
 
 from . import geography as g
 
@@ -396,7 +396,7 @@ class DBListSource(ListSource):
             }
             row_data["_instance"] = instance
             # Bypassing explicit Row instantiation by appending dict directly
-            row = self.append(row_data)
+            self.append(row_data)
         self._notify_count()
 
     def add_instance(self, instance: Model) -> Row:

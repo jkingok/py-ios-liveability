@@ -5,15 +5,11 @@ Provides `AddressModel`, `ServiceModel`, and `ComparisonModel` singletons that b
 records to Toga GUI `ListSource` data providers and manage asynchronous proximity search queues.
 """
 
-import datetime as dt
-from itertools import product
-from pathlib import Path
-from playhouse.signals import Model, post_delete, post_save
+from playhouse.signals import post_save
 from queue import Queue
-from rubicon.objc import ObjCClass
 import toga
-from toga.sources import ListSource
 import traceback
+from typing import Callable
 
 from . import db as d
 from . import geography as g
@@ -125,7 +121,9 @@ class RouteGenerator:
         for handler in self._listeners:
             handler()
 
-    async def _compute_and_save_route(self, address: Address, service: Service) -> dict:
+    async def _compute_and_save_route(
+        self, address: d.Address, service: d.Service
+    ) -> dict:
         # Find the first matching service for the location
         destination = await g.perform_search_at(
             service.title, address.latitude, address.longitude

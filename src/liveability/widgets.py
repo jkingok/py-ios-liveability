@@ -10,7 +10,7 @@ import asyncio
 from pathlib import Path
 import toga
 from toga.sources import ListSource, Row
-from typing import Any, Callable
+from typing import Any
 
 
 class DynamicLabel(toga.Label):

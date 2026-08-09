@@ -7,25 +7,19 @@ and "Help" (rendered Markdown documentation webview).
 """
 
 import asyncio
-import ctypes
-import datetime as dt
 import httpx
 from markdown import markdown as md
 from pathlib import Path
-from rubicon.objc import ObjCClass, ObjCInstance, Block
-from rubicon.objc.runtime import load_library, objc_id
-from rubicon.objc.types import ctype_for_encoding
-import threading
+from rubicon.objc import ObjCInstance
+from rubicon.objc.runtime import objc_id
 import toga
 import traceback
 import urllib
 
 from . import bridge as b
 
-# from . import data as d
 from . import db as d
 
-# from . import functions as f
 from . import geography as g
 from . import model as m
 from . import settings as s
@@ -250,7 +244,7 @@ class Prototype:
                                 id="view_address_box_map",
                                 flex=1,
                                 location=(
-                                    ll := (
+                                    (
                                         row._instance.latitude,
                                         row._instance.longitude,
                                     )
