@@ -93,11 +93,14 @@ class DynamicMapView(toga.MapView):
 
     # --- Helper for Row -> Pin Conversion ---
 
-    def _create_pin_from_row(self, row: Row) -> toga.MapPin:
-        lat = row._instance.latitude
-        lon = row._instance.longitude
+    def _create_pin_from_row(self, row: Row) -> toga.MapPin | None:
+        if row._instance.latitude and row._instance.longitude:
+            lat = row._instance.latitude
+            lon = row._instance.longitude
 
-        return toga.MapPin(location=(lat, lon), title=row.title, subtitle=row.subtitle)
+            return toga.MapPin(location=(lat, lon), title=row.title, subtitle=row.subtitle)
+        else:
+            return None
 
     def row_of_pin(self, pin):
         return self._pin_src[i] if (i := id(pin)) in self._pin_src else None
@@ -114,11 +117,12 @@ class DynamicMapView(toga.MapView):
     def source_insert(self, index: int, item) -> None:
         """Single item added."""
         pin = self._create_pin_from_row(item)
-        self._pin_map[id(item)] = pin
-        self._pin_src[id(pin)] = item
-        self.pins.add(pin)
+        if pin: 
+            self._pin_map[id(item)] = pin
+            self._pin_src[id(pin)] = item
+            self.pins.add(pin)
 
-        self._recalculate_centre()
+            self._recalculate_centre()
 
     def source_remove(self, index: int, item) -> None:
         """Single item removed."""
@@ -141,11 +145,12 @@ class DynamicMapView(toga.MapView):
 
         # Insert updated pin representation
         new_pin = self._create_pin_from_row(item)
-        self._pin_map[row_key] = new_pin
-        self._pin_src[id(new_pin)] = item
-        self.pins.add(new_pin)
+        if new_pin:
+            self._pin_map[row_key] = new_pin
+            self._pin_src[id(new_pin)] = item
+            self.pins.add(new_pin)
 
-        self._recalculate_centre()
+            self._recalculate_centre()
 
 
 class LabelledDate(toga.Box):
