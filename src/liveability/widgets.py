@@ -8,6 +8,7 @@ dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via
 
 import asyncio
 from pathlib import Path
+import sys
 import toga
 from toga.sources import ListSource, Row
 from typing import Any
@@ -75,6 +76,10 @@ class DynamicMapView(toga.MapView):
 
         # Update Toga MapView center attribute
         self.center = (avg_lat, avg_lon)
+
+        # Also zoom to fit all pins
+        if sys.platform == "ios":
+            (mkmap := self._impl.native).showAnnotations(mkmap.annotations, animated=True)
 
     # --- Helper for Row -> Pin Conversion ---
 
