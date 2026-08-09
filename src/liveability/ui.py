@@ -103,9 +103,9 @@ class Prototype:
             if e:
                 self._error("Search Failure", ObjCInstance(e).localizedDescription)
             else:
-                l = list(ObjCInstance(r))
-                if len(l) == 1:
-                    record_item(l[0])
+                map_items_list = list(ObjCInstance(r))
+                if len(map_items_list) == 1:
+                    record_item(map_items_list[0])
                 else:
                     self._error("Search Failure", "Could not determine address")
                     record_item(b.MKMapItem.alloc().initWithLocation(loc))
@@ -227,8 +227,8 @@ class Prototype:
                                 d.DBListSource(
                                     d.Route.select().where(
                                         (d.Route.address == row._instance)
-                                        & (d.Route.latitude != None)
-                                        & (d.Route.longitude != None)
+                                        & (d.Route.latitude is not None)
+                                        & (d.Route.longitude is not None)
                                     )
                                 ),
                                 False,
