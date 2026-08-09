@@ -7,6 +7,8 @@ dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via
 """
 
 import asyncio
+import math
+import math
 from pathlib import Path
 import sys
 import toga
@@ -61,25 +63,33 @@ class DynamicMapView(toga.MapView):
         if not self.auto_center or not self._pin_map:
             return
 
-        total_lat = 0.0
-        total_lon = 0.0
-        count = len(self._pin_map)
+        pins = list(self._pin_map.values())
 
-        for pin in self._pin_map.values():
-            lat, lon = pin.location
-            total_lat += lat
-            total_lon += lon
+        lats = [pin.location[0] for pin in pins]
+        lons = [pin.location[1] for pin in pins]
 
-        # Compute arithmetic mean
-        avg_lat = total_lat / count
-        avg_lon = total_lon / count
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
 
-        # Update Toga MapView center attribute
-        self.center = (avg_lat, avg_lon)
+        # Calculate center point
+        mid_lat = (min_lat + max_lat) / 2.0
+        mid_lon = (min_lon + max_lon) / 2.0
 
-        # Also zoom to fit all pins
-        if sys.platform == "ios":
-            (mkmap := self._impl.native).showAnnotations(mkmap.annotations, animated=True)
+        # Estimate map zoom level based on max coordinate span
+        max_span = max(max_lat - min_lat, max_lon - min_lon)
+        if max_span > 0:
+            # Toga zoom scale formula roughly maps longitude span to 0-20 scale
+            calculated_zoom = int(max(0, min(20, math.log2(360 / max_span) - 1)))
+        else:
+            calculated_zoom = 15  # Fallback for single pin
+
+        # Updating Toga properties triggers both Python state and MKMapView simultaneously
+        self.location = (mid_lat, mid_lon)
+        self.zoom = calculated_zoom
+
+        # Or, zoom to fit all pins
+        #if sys.platform == "ios":
+        #    (mkmap := self._impl.native).showAnnotations(mkmap.annotations, animated=True)
 
     # --- Helper for Row -> Pin Conversion ---
 
