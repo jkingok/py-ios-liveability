@@ -1,16 +1,53 @@
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from peewee import SqliteDatabase, Proxy, Select, CompositeKey, CharField, Field, FloatField, ForeignKeyField, IntegerField, fn
+from peewee import (
+    SqliteDatabase,
+    Proxy,
+    Select,
+    AutoField,
+    CharField,
+    Field,
+    FloatField,
+    ForeignKeyField,
+    IntegerField,
+    fn,
+    JOIN,
+    Case,
+)
 from playhouse.signals import Model, post_delete, post_save
-from typing import Any, Callable
+import toga
+from toga.sources import ListSource, Row
+from typing import Any, Callable, Self, Sequence
+
+from . import geography as g
 
 db_ref = Proxy()
 mgr = None
 
+
+def count_to_emoji(count: int) -> str:
+    if count == 10:
+        return "🔟"
+    digit_map = {
+        "0": "0️⃣",
+        "1": "1️⃣",
+        "2": "2️⃣",
+        "3": "3️⃣",
+        "4": "4️⃣",
+        "5": "5️⃣",
+        "6": "6️⃣",
+        "7": "7️⃣",
+        "8": "8️⃣",
+        "9": "9️⃣",
+    }
+    return "".join(digit_map[d] for d in str(count))
+
+
 class BaseModel(Model):
     class Meta:
         database = db_ref
+
 
 class Address(BaseModel):
     title = CharField()
@@ -21,6 +58,59 @@ class Address(BaseModel):
     @property
     def icon(self) -> None:
         return None
+
+    @property
+    def summary(self):
+        """Formats the aggregated counts into a clean, readable one-liner."""
+        if not getattr(self, "total_routes", 0):
+            return "🛑 No routes"
+
+        # Emoji mappings for non-zero counts
+        mode_map = [
+            (TravelMode.WALKING.label, getattr(self, "walking_count", 0)),
+            (TravelMode.CYCLING.label, getattr(self, "cycling_count", 0)),
+            (TravelMode.DRIVING.label, getattr(self, "driving_count", 0)),
+            (TravelMode.TRANSITING.label, getattr(self, "transiting_count", 0)),
+            ("⚠️", getattr(self, "error_count", 0)),
+        ]
+
+        parts = [
+            f"{count_to_emoji(count)}{emoji}" for emoji, count in mode_map if count > 0
+        ]
+        return " ".join(parts) if parts else self.__data__.get("subtitle") or ""
+
+    @classmethod
+    def get_summary_list(cls):
+        """Returns Address models with explicit mode and error counts attached."""
+        return (
+            cls.select(
+                cls,
+                fn.COUNT(Route.id).alias("total_routes"),
+                fn.SUM(
+                    Case(None, [(Route.mode == TravelMode.DRIVING.code, 1)], 0)
+                ).alias("driving_count"),
+                fn.SUM(
+                    Case(None, [(Route.mode == TravelMode.TRANSITING.code, 1)], 0)
+                ).alias("transiting_count"),
+                fn.SUM(
+                    Case(None, [(Route.mode == TravelMode.WALKING.code, 1)], 0)
+                ).alias("walking_count"),
+                fn.SUM(
+                    Case(None, [(Route.mode == TravelMode.CYCLING.code, 1)], 0)
+                ).alias("cycling_count"),
+                # Flag rows where a Route exists but mode is NULL
+                fn.SUM(
+                    Case(
+                        None,
+                        [((Route.id.is_null(False) & Route.mode.is_null(True)), 1)],
+                        0,
+                    )
+                ).alias("error_count"),
+            )
+            .join(Route, JOIN.LEFT_OUTER, on=(cls.id == Route.address))
+            .group_by(cls.id)
+        )
+
 
 class Service(BaseModel):
     name = CharField()
@@ -38,16 +128,19 @@ class Service(BaseModel):
     def subtitle(self) -> str:
         return self.emoji
 
+
 class EnumField(Field):
     """Custom Peewee Field for storing Enums by an explicit attribute (e.g., 'code')."""
-    
+
     # SQLite column type
     field_type = "INTEGER"
 
-    def __init__(self, enum_cls: type[Enum], value_attr: str = "code", *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self, enum_cls: type[Enum], value_attr: str = "code", *args: Any, **kwargs: Any
+    ) -> None:
         self.enum_cls = enum_cls
         self.value_attr = value_attr
-        
+
         # Build a fast lookup mapping raw DB code -> Enum member
         self._value_map = {getattr(member, value_attr): member for member in enum_cls}
         super().__init__(*args, **kwargs)
@@ -66,12 +159,13 @@ class EnumField(Field):
             return None
         return self._value_map.get(value)
 
+
 class TravelMode(Enum):
     # (code, display_label)
-    WALKING = (0, '🥾')
-    CYCLING = (1, '🚲')
-    TRANSITING = (2, '🚌')
-    DRIVING = (3, '🚗')
+    WALKING = (0, "🥾")
+    CYCLING = (1, "🚲")
+    TRANSITING = (2, "🚌")
+    DRIVING = (3, "🚗")
 
     def __init__(self, code: int, label: str) -> None:
         self.code = code
@@ -106,18 +200,22 @@ class TravelMode(Enum):
     def __str__(self) -> str:
         return self.label
 
+
 class Route(BaseModel):
-    address = ForeignKeyField(Address, backref='routes', on_delete="CASCADE")
-    service = ForeignKeyField(Service, backref='routes', on_delete="CASCADE")
+    id = AutoField()
+    address = ForeignKeyField(Address, backref="routes", on_delete="CASCADE")
+    service = ForeignKeyField(Service, backref="routes", on_delete="CASCADE")
     latitude = FloatField(null=True)
     longitude = FloatField(null=True)
-    distance = FloatField(null=True) # metres
-    time = IntegerField(null=True) # seconds
+    distance = FloatField(null=True)  # metres
+    time = IntegerField(null=True)  # seconds
+    distance_return = FloatField(null=True)
+    time_return = FloatField(null=True)
     mode = EnumField(TravelMode, value_attr="code", null=True)
     error = CharField(null=True)
 
     class Meta:
-        primary_key = CompositeKey("address", "service")
+        indexes = ((("address", "service"), True),)
 
     @property
     def icon(self) -> None:
@@ -129,41 +227,56 @@ class Route(BaseModel):
 
     @property
     def subtitle(self) -> str:
-        return f"⚠ {self.error}" if self.error else f"By {self.mode} in {self.time}s for {self.distance}m"
+        return (
+            f"⚠ {self.error}"
+            if self.error
+            else g.format_eta(
+                str(self.mode),
+                self.time,
+                self.distance,
+                self.time_return,
+                self.distance_return,
+            )
+        )
+
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:
-        self.db = SqliteDatabase(
-            db_path,
-            pragmas={'foreign_keys': 1}
-        )
+        self.db = SqliteDatabase(db_path, pragmas={"foreign_keys": 1})
         db_ref.initialize(self.db)
         self.db.connect()
         self.db.create_tables([Address, Service, Route])
         # Delete routes where the referenced address no longer exists
-        Route.delete().where(
-            Route.address.not_in(Address.select(Address.id))
-        ).execute()
-        Route.delete().where(
-            Route.service.not_in(Service.select(Service.id))
-        ).execute()
+        Route.delete().where(Route.address.not_in(Address.select(Address.id))).execute()
+        Route.delete().where(Route.service.not_in(Service.select(Service.id))).execute()
+
 
 @lru_cache(maxsize=1)
 def init(db_path: Path | None = None) -> None:
     global mgr
     mgr = _Manager(db_path)
 
-import toga
-from toga.sources import ListSource, Row
 
 class DBListSource(ListSource):
-    """A Toga ListSource backed by Peewee with live count notifications."""
+    """A Toga ListSource backed by Peewee with live count and relation updates."""
+
+    @classmethod
+    def create_address_summary(cls, on_count_change=None):
+        return DBListSource(
+            Address.get_summary_list(),
+            ["title", "summary", "icon", "subtitle"],
+            on_count_change,
+            [Route],
+            True,
+        )
 
     def __init__(
-        self, 
-        model_or_query: type[Model] | Select, 
+        self,
+        model_or_query: type[Model] | Select,
         accessors: list[str] | None = None,
-        on_count_change: Callable[[int], None] | None = None
+        on_count_change: Callable[[int], None] | None = None,
+        related_models: Sequence[type[Model]] | None = None,
+        watch_routes: bool = False,
     ):
         if not accessors:
             accessors = ["title", "subtitle", "icon"]
@@ -177,21 +290,51 @@ class DBListSource(ListSource):
             self.query = model_or_query.select()
 
         self.on_count_change = on_count_change
+        self.related_models = related_models or []
 
-        # Wire signals to fine-grained update handlers
-        # Generate a unique ID for this instance (using id(self))
+        # Unique ID for signal dispatching
         dispatch_uid = f"{self.model_cls.__name__}_{id(self)}"
 
-        # Connect using dispatch_uid to allow multiple DBListSource instances
-        post_save.connect(self._on_post_save, sender=self.model_cls, name=f"{dispatch_uid}_save")
-        post_delete.connect(self._on_post_delete, sender=self.model_cls, name=f"{dispatch_uid}_delete")
+        # 1. Connect primary model signals
+        post_save.connect(
+            self._on_post_save, sender=self.model_cls, name=f"{dispatch_uid}_save"
+        )
+        post_delete.connect(
+            self._on_post_delete, sender=self.model_cls, name=f"{dispatch_uid}_delete"
+        )
+
+        # 2. Connect secondary/joined model signals
+        for idx, rel_model in enumerate(self.related_models):
+            post_save.connect(
+                self._on_related_change,
+                sender=rel_model,
+                name=f"{dispatch_uid}_rel_{rel_model.__name__}_{idx}_save",
+            )
+            post_delete.connect(
+                self._on_related_change,
+                sender=rel_model,
+                name=f"{dispatch_uid}_rel_{rel_model.__name__}_{idx}_delete",
+            )
+
+        if watch_routes:
+            toga.App.app.routes.register(self.reload_from_db)
 
         self.reload_from_db()
+
+    def _on_related_change(self, sender, instance, created=False):
+        """Handler triggered whenever a related model (e.g. Route) changes."""
+        # Option A: Full reload to refresh aggregate subqueries/counts
+        self.reload_from_db()
+
+        # Option B (Targeted): If instance has FK back to primary model, reload targeted row
+        # foreign_key_val = getattr(instance, 'address_id', None)
+        # if foreign_key_val:
+        #     self.refresh_row_by_id(foreign_key_val)
 
     def _extract_data(self, instance: Model) -> dict[str, str]:
         """Utility to convert instance attributes into dictionary for ListSource."""
         values = {
-            f: (getattr(instance, f)) # if getattr(instance, f) is not None else "")
+            f: (getattr(instance, f))  # if getattr(instance, f) is not None else "")
             for f in self._accessors
         }
         values["_instance"] = instance
@@ -206,7 +349,7 @@ class DBListSource(ListSource):
         return -1, None
 
     def _on_post_save(self, sender, instance, created: bool, **kwargs) -> None:
-        row_data = self._extract_data(instance) 
+        row_data = self._extract_data(instance)
 
         if created:
             # 1. NEW ITEM: Append directly
@@ -246,11 +389,14 @@ class DBListSource(ListSource):
 
     def reload_from_db(self) -> None:
         self.clear()
-        for instance in self.query:
-            row_data = {f: (getattr(instance, f) if getattr(instance, f) is not None else "") for f in self._accessors}
+        for instance in self.query.clone().iterator():
+            row_data = {
+                f: (getattr(instance, f) if getattr(instance, f) is not None else "")
+                for f in self._accessors
+            }
             row_data["_instance"] = instance
             # Bypassing explicit Row instantiation by appending dict directly
-            row = self.append(row_data)
+            self.append(row_data)
         self._notify_count()
 
     def add_instance(self, instance: Model) -> Row:

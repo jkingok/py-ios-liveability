@@ -5,23 +5,22 @@ Provides `AddressModel`, `ServiceModel`, and `ComparisonModel` singletons that b
 records to Toga GUI `ListSource` data providers and manage asynchronous proximity search queues.
 """
 
-import datetime as dt
-from itertools import product
-from pathlib import Path
-from playhouse.signals import Model, post_delete, post_save
+from playhouse.signals import post_save
 from queue import Queue
-from rubicon.objc import ObjCClass
 import toga
-from toga.sources import ListSource
+import traceback
+from typing import Callable
 
 from . import db as d
 from . import geography as g
+
 
 class RouteGenerator:
     """Manages background route calculation and UI progress notification."""
 
     def __init__(self) -> None:
         self._queue = Queue()
+        self._listeners = []
 
         # UI Callback hooks: fn(is_busy, current_progress, total_tasks)
         self.on_progress_update: Callable[[bool, int, int], None] | None = None
@@ -29,10 +28,17 @@ class RouteGenerator:
         # Generate a unique ID for this instance (using id(self))
         address_uid = f"{d.Address.__name__}_{id(self)}"
         service_uid = f"{d.Service.__name__}_{id(self)}"
-        
+
         # Connect using dispatch_uid to allow multiple DBListSource instances
-        post_save.connect(self._on_address_save, sender=d.Address, name=f"{address_uid}_save")
-        post_save.connect(self._on_service_save, sender=d.Service, name=f"{service_uid}_save")
+        post_save.connect(
+            self._on_address_save, sender=d.Address, name=f"{address_uid}_save"
+        )
+        post_save.connect(
+            self._on_service_save, sender=d.Service, name=f"{service_uid}_save"
+        )
+
+    def register(self, handler):
+        self._listeners.append(handler)
 
     def trigger_full_recalculate(self) -> None:
         """Queues all Address/Service pairs that don't yet have a Route."""
@@ -42,7 +48,11 @@ class RouteGenerator:
         for addr in addresses:
             for svc in services:
                 # Only queue missing routes
-                if not d.Route.select().where((d.Route.address == addr) & (d.Route.service == svc)).exists():
+                if (
+                    not d.Route.select()
+                    .where((d.Route.address == addr) & (d.Route.service == svc))
+                    .exists()
+                ):
                     self._queue.put((addr, svc))
         self._ensure_worker_running()
 
@@ -56,7 +66,7 @@ class RouteGenerator:
     def trigger_service_updated(self, service: d.Service) -> None:
         """Recomputes routes for ALL addresses against this updated service."""
         addresses = list(d.Address.select())
-        
+
         # Delete stale routes for this service
         d.Route.delete().where(d.Route.service == service).execute()
 
@@ -69,31 +79,36 @@ class RouteGenerator:
             self.trigger_address_added(instance)
 
     def _on_service_save(self, sender, instance, created: bool, **kwargs) -> None:
-        self.trigger_service_updated(instance) 
+        self.trigger_service_updated(instance)
 
     def _ensure_worker_running(self) -> None:
         if not self._queue.empty():
             self._notify_ui(is_busy=True)
-            toga.App.app.loop.call_soon(self._do_queue)
+            toga.App.app.loop.create_task(self._do_queue())
 
-    def _do_queue(self) -> None:
+    async def _do_queue(self) -> None:
         """Background thread executing the route calculations."""
         if not self._queue.empty():
             address, service = self._queue.get()
 
-            # Broadcast start of task to UI
-            self._notify_ui(is_busy=True)
+            try:
+                # Broadcast start of task to UI
+                self._notify_ui(is_busy=True)
 
-            # --- YOUR GEOSPATIAL LOGIC PLACEHOLDER ---
-            self._compute_and_save_route(address, service)
-            # ------------------------------------------
-
-            #self._queue.task_done()
-
-            # Broadcast progress step
-            self._notify_ui(is_busy=True)
-
-        self._ensure_worker_running()
+                # --- YOUR GEOSPATIAL LOGIC PLACEHOLDER ---
+                d.Route.replace(
+                    **await self._compute_and_save_route(address, service)
+                ).execute()
+                # ------------------------------------------
+            except Exception as e:
+                traceback.print_exc()
+                d.Route.replace(
+                    address=address, service=service, error=str(e)
+                ).execute()
+            finally:
+                self._queue.task_done()
+                self._notify_ui(is_busy=False)
+                self._ensure_worker_running()
 
     def _notify_ui(self, is_busy: bool) -> None:
         """Dispatches progress metrics back to Toga's main GUI loop."""
@@ -101,49 +116,37 @@ class RouteGenerator:
             self.on_progress_update(
                 is_busy,
                 d.Route.select().count(),
-                d.Address.select().count() * d.Service.select().count()
+                d.Address.select().count() * d.Service.select().count(),
             )
+        for handler in self._listeners:
+            handler()
 
-    def _compute_and_save_route(self, address: Address, service: Service) -> None:
-        def step1(result, value, a, s):
-            if isinstance(value, ObjCClass('MKMapItem')):
-                def step2(result, value, a, s, t, ms):
-                    if isinstance(value, ObjCClass('MKETAResponse')):
-                        m = ms[0]
-                        ms = ms[1:] 
-                        if value.expectedTravelTime >= 11 * 60 and len(ms) > 0:
-                            g.perform_eta((a.latitude, a.longitude), t, ms[0], lambda r, v, a=a, s=s, t=t, ms=ms: step2(r, v, a, s, t, ms))
-                        else:
-                            d.Route.replace(
-                                address=a,
-                                service=s,
-                                latitude=t.location.coordinate.latitude,
-                                longitude=t.location.coordinate.longitude,
-                                distance=value.distance,
-                                time=value.expectedTravelTime,
-                                mode=d.TravelMode.from_label(m),
-                                error=None
-                            ).execute()
-                            self._queue.task_done()
-                            self._notify_ui(is_busy=False)
-                            self._ensure_worker_running()
-                    else:
-                        d.Route.replace(
-                            address=a,
-                            service=s,
-                            error=str(result)
-                        )
-                        self._queue.task_done()
-                        self._notify_ui(is_busy=False)
-                        self._ensure_worker_running()
-                g.perform_eta((a.latitude, a.longitude), value, '🥾', lambda r, v, a=a, s=s, t=value, m='🥾🚲🚗': step2(r, v, a, s, t, m))
-            else:
-                d.Route.replace(
-                    address=a,
-                    service=s,
-                    error=str(result)
+    async def _compute_and_save_route(
+        self, address: d.Address, service: d.Service
+    ) -> dict:
+        # Find the first matching service for the location
+        destination = await g.perform_search_at(
+            service.title, address.latitude, address.longitude
+        )
+        if destination:
+            for m in "🥾🚲🚗":
+                eta = await g.perform_eta(
+                    (address.latitude, address.longitude), destination[1], m
                 )
-                self._queue.task_done()
-                self._notify_ui(is_busy=False)
-                self._ensure_worker_running()
-        g.perform_search_at(service.title, address.latitude, address.longitude, lambda r, o=None, a=address, s=service: step1(r, o, a, s))
+                if eta[1].expectedTravelTime < 11 * 60 or m == "🚗":
+                    eta2 = await g.perform_eta(
+                        destination[1], (address.latitude, address.longitude), m
+                    )
+                    return {
+                        "address": address,
+                        "service": service,
+                        "latitude": destination[1].location.coordinate.latitude,
+                        "longitude": destination[1].location.coordinate.longitude,
+                        "distance": eta[1].distance,
+                        "time": eta[1].expectedTravelTime,
+                        "distance_return": eta2[1].distance,
+                        "time_return": eta2[1].expectedTravelTime,
+                        "mode": d.TravelMode.from_label(m),
+                        "error": None,
+                    }
+        return {"address": address, "service": service, "error": "No match"}

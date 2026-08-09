@@ -1,8 +1,9 @@
 [project]
 name = "liveability"
-description = "Location comparison tool"
+description = "Compare locations by their nearby services"
 version = "0.0.1"
 dependencies = [
+    "httpx",
     "markdown",
     "peewee",
     "requests",
@@ -27,7 +28,7 @@ author_email = "jkingok@users.noreply.github.com"
 
 [tool.briefcase.app.liveability]
 formal_name = "Liveability"
-description = "Location comparison tool"
+description = "Compare locations by their nearby services"
 long_description = """Add services and addresses for locations you care about and the tool will use Apple Maps
 to calculate ETAs between each allowing you to compare their liveability.
 """
@@ -39,9 +40,9 @@ test_sources = [
 ]
 
 requires = [
+    "httpx",
     "markdown",
     "peewee",
-    "requests",
     "tomlkit"
 ]
 test_requires = [

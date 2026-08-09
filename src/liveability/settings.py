@@ -11,6 +11,7 @@ import tomlkit  # Pure-Python style-preserving library
 
 CONFIG_NAME = "config.toml"
 
+
 class Settings:
     """
     Singleton class managing application configuration settings.
@@ -18,6 +19,7 @@ class Settings:
     :param paths: Toga application paths provider containing `.config` path.
     :type paths: toga.paths.Paths
     """
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):
