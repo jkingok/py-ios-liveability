@@ -1,6 +1,7 @@
 [project]
 name = "liveability"
 description = "Compare locations by their nearby services"
+version = "0.0.1"
 dependencies = [
     "httpx",
     "markdown",
@@ -27,8 +28,8 @@ author_email = "jkingok@users.noreply.github.com"
 [tool.briefcase.app.liveability]
 formal_name = "Liveability"
 description = "Compare locations by their nearby services"
-long_description = """Use Apple Maps to rank locations by their liveability.
-Tell us the services you care about the locations you want to rank.
+long_description = """Add services and addresses for locations you care about and the tool will use Apple Maps
+to calculate ETAs between each allowing you to compare their liveability.
 """
 sources = [
     "src/liveability",
@@ -46,6 +47,8 @@ requires = [
 test_requires = [
     "pytest",
 ]
+icon="assets/icon"
+splash_background_color="#000000"
 
 [tool.briefcase.app.liveability.macOS]
 universal_build = true
