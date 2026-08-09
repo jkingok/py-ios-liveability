@@ -23,6 +23,7 @@ from . import data as d
 
 DB_NAME = "liveability.db"
 
+
 class Functions:
     """
     Singleton data access manager performing SQLite operations.
@@ -32,6 +33,7 @@ class Functions:
     :param settings: Application settings manager instance.
     :type settings: liveability.settings.Settings
     """
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -108,7 +110,7 @@ class Functions:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute(
                 "SELECT title, subtitle, latitude, longitude FROM address WHERE identifier = ?",
-                (query_identifier,)
+                (query_identifier,),
             )
             row = cursor.fetchone()
         return d.Address(*row) if row else None
@@ -125,7 +127,7 @@ class Functions:
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO address VALUES (?, ?, ?, ?, ?)",
-                (query_identifier, a.title, a.subtitle, a.latitude, a.longitude)
+                (query_identifier, a.title, a.subtitle, a.latitude, a.longitude),
             )
 
     def delete_address(self, query_identifier: str) -> None:
@@ -137,8 +139,7 @@ class Functions:
         """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
-                "DELETE FROM address WHERE identifier = ?",
-                (query_identifier,)
+                "DELETE FROM address WHERE identifier = ?", (query_identifier,)
             )
 
     def map_addresses(self) -> dict[str, d.Address]:
@@ -150,7 +151,9 @@ class Functions:
         """
         cache = {}
         with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.execute("SELECT identifier, title, subtitle, latitude, longitude FROM address")
+            cursor = conn.execute(
+                "SELECT identifier, title, subtitle, latitude, longitude FROM address"
+            )
             for row in cursor.fetchall():
                 cache[row[0]] = d.Address(*row[1:])
         return cache
@@ -164,7 +167,9 @@ class Functions:
         """
         cache = []
         with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.execute("SELECT title, subtitle, latitude, longitude FROM address")
+            cursor = conn.execute(
+                "SELECT title, subtitle, latitude, longitude FROM address"
+            )
             for row in cursor.fetchall():
                 cache.append(d.Address(*row))
         return cache
@@ -181,7 +186,7 @@ class Functions:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.execute(
                 "SELECT name, emoji FROM service WHERE identifier = ?",
-                (query_identifier,)
+                (query_identifier,),
             )
             row = cursor.fetchone()
         return d.Service(*row) if row else None
@@ -198,7 +203,7 @@ class Functions:
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO service VALUES (?, ?, ?)",
-                (query_identifier, a.name, a.emoji)
+                (query_identifier, a.name, a.emoji),
             )
 
     def delete_service(self, query_identifier: str) -> None:
@@ -210,8 +215,7 @@ class Functions:
         """
         with sqlite3.connect(self.db_file) as conn:
             conn.execute(
-                "DELETE FROM service WHERE identifier = ?",
-                (query_identifier,)
+                "DELETE FROM service WHERE identifier = ?", (query_identifier,)
             )
 
     def map_services(self) -> dict[str, d.Service]:

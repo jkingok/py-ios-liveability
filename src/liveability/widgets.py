@@ -12,6 +12,7 @@ import toga
 from toga.sources import ListSource, Row
 from typing import Any, Callable
 
+
 class DynamicLabel(toga.Label):
     def __init__(self, source, formatter=None, **kwargs):
         self.source = source
@@ -23,6 +24,7 @@ class DynamicLabel(toga.Label):
     def update(self, value):
         self.text = self.formatter(value)
 
+
 class DynamicMapView(toga.MapView):
     """A Toga MapView that dynamically renders pins and centers on their centroid."""
 
@@ -30,13 +32,13 @@ class DynamicMapView(toga.MapView):
         self,
         data: ListSource | None = None,
         auto_center: bool = True,
-        fixed_pins: list[toga.MapPin] | None = None, 
-        **kwargs: Any
+        fixed_pins: list[toga.MapPin] | None = None,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
 
         self.auto_center = auto_center
-        
+
         self.fixed_pins = fixed_pins if fixed_pins else []
 
         self._pin_map: dict[int, toga.MapPin] = {}
@@ -44,7 +46,7 @@ class DynamicMapView(toga.MapView):
         self._data: ListSource | None = data
 
         if data is not None:
-            #self.source_change(data)
+            # self.source_change(data)
             for p in self.fixed_pins:
                 self.pins.add(p)
             for row in data:
@@ -80,14 +82,10 @@ class DynamicMapView(toga.MapView):
         lat = row._instance.latitude
         lon = row._instance.longitude
 
-        return toga.MapPin(
-            location=(lat, lon),
-            title=row.title,
-            subtitle=row.subtitle
-        )
+        return toga.MapPin(location=(lat, lon), title=row.title, subtitle=row.subtitle)
 
     def row_of_pin(self, pin):
-        return self._pin_src[i] if (i := id(pin)) in self._pin_src else None 
+        return self._pin_src[i] if (i := id(pin)) in self._pin_src else None
 
     # --- Toga Source Listener Hooks ---
 
@@ -134,6 +132,7 @@ class DynamicMapView(toga.MapView):
 
         self._recalculate_centre()
 
+
 class LabelledDate(toga.Box):
     """
     Toga Box combining a text Label and DateInput widget.
@@ -146,21 +145,15 @@ class LabelledDate(toga.Box):
     :param id: Widget identifier.
     :type id: str
     """
+
     def __init__(self, label_text: str, value_text=None, callback=None, id=None):
         super().__init__(
             direction="row",
             align_items="center",
             children=[
-                toga.Label(
-                    label_text + ": "
-                ),
-                toga.DateInput(
-                    id=id,
-                    value=value_text,
-                    flex=1,
-                    on_change=callback
-                )
-            ]
+                toga.Label(label_text + ": "),
+                toga.DateInput(id=id, value=value_text, flex=1, on_change=callback),
+            ],
         )
 
 
@@ -179,22 +172,28 @@ class LabelledNumber(toga.Box):
     :param id: Widget identifier.
     :type id: str
     """
-    def __init__(self, label_text: str, value_num=0, callback=None, readonly: bool = False, id=None):
+
+    def __init__(
+        self,
+        label_text: str,
+        value_num=0,
+        callback=None,
+        readonly: bool = False,
+        id=None,
+    ):
         super().__init__(
             direction="row",
             align_items="center",
             children=[
-                toga.Label(
-                    label_text + ": "
-                ),
+                toga.Label(label_text + ": "),
                 toga.NumberInput(
                     id=id,
                     value=value_num,
                     flex=1,
                     on_change=callback,
-                    readonly=readonly
-                )
-            ]
+                    readonly=readonly,
+                ),
+            ],
         )
 
 
@@ -213,22 +212,23 @@ class LabelledSelection(toga.Box):
     :param id: Widget identifier.
     :type id: str
     """
-    def __init__(self, label_text: str, value_text="", value_list=[], callback=None, id=None):
+
+    def __init__(
+        self, label_text: str, value_text="", value_list=[], callback=None, id=None
+    ):
         super().__init__(
             direction="row",
             align_items="center",
             children=[
-                toga.Label(
-                    label_text + ": "
-                ),
+                toga.Label(label_text + ": "),
                 toga.Selection(
                     id=id,
                     items=value_list,
                     value=value_text,
                     flex=1,
-                    on_change=callback
-                )
-            ]
+                    on_change=callback,
+                ),
+            ],
         )
 
 
@@ -251,31 +251,43 @@ class LabelledText(toga.Box):
     :param id: Widget identifier.
     :type id: str
     """
-    def __init__(self, label_text: str, value_text="", callback=None, confirm=None, readonly: bool = False, multiline: bool = False, id=None, **kwargs):
+
+    def __init__(
+        self,
+        label_text: str,
+        value_text="",
+        callback=None,
+        confirm=None,
+        readonly: bool = False,
+        multiline: bool = False,
+        id=None,
+        **kwargs,
+    ):
         super().__init__(
             direction="column" if multiline else "row",
             align_items="start" if multiline else "center",
             children=[
-                toga.Label(
-                    label_text + ": "
+                toga.Label(label_text + ": "),
+                (
+                    toga.MultilineTextInput(
+                        id=id,
+                        value=value_text,
+                        flex=1,
+                        on_change=callback,
+                        readonly=readonly,
+                    )
+                    if multiline
+                    else toga.TextInput(
+                        id=id,
+                        value=value_text,
+                        flex=1,
+                        on_change=callback,
+                        on_confirm=confirm,
+                        readonly=readonly,
+                    )
                 ),
-                toga.MultilineTextInput(
-                    id=id,
-                    value=value_text,
-                    flex=1,
-                    on_change=callback,
-                    readonly=readonly
-                ) if multiline else
-                toga.TextInput(
-                    id=id,
-                    value=value_text,
-                    flex=1,
-                    on_change=callback,
-                    on_confirm=confirm,
-                    readonly=readonly
-                )
             ],
-            **kwargs
+            **kwargs,
         )
 
 
@@ -283,17 +295,15 @@ class LabelledProgress(toga.Box):
     """
     Toga Box combining a ProgressBar and progress text status Label.
     """
+
     def __init__(self, **kwargs):
         self.bar = toga.ProgressBar(flex=1)
         self.text = toga.Label("")
         super().__init__(
             direction="row",
             align_items="center",
-            children=[
-                self.bar,
-                self.text
-            ],
-            **kwargs
+            children=[self.bar, self.text],
+            **kwargs,
         )
 
     def start(self, limit: int = 0):
@@ -354,17 +364,11 @@ class LabelledActivity(toga.Box):
     """
     Toga Box combining an ActivityIndicator spinner and status text Label.
     """
+
     def __init__(self, **kwargs):
         self.activity = toga.ActivityIndicator()
         self.text = toga.Label("", flex=1)
-        super().__init__(
-            direction="row",
-            children=[
-                self.activity,
-                self.text
-            ],
-            **kwargs
-        )
+        super().__init__(direction="row", children=[self.activity, self.text], **kwargs)
 
     def update(self, value: str = "", on: bool = True):
         """
@@ -383,6 +387,7 @@ class StackContainer(toga.Box):
     """
     Toga Box container supporting push/pop view navigation stack mechanics.
     """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.stack = []
@@ -411,6 +416,7 @@ class GenericUtils:
     """
     Generic cross-platform utilities.
     """
+
     def info_task(w, title: str, text: str):
         """
         Displays an InfoDialog asynchronously.
@@ -428,6 +434,7 @@ class PlatformUtils(GenericUtils):
     """
     Fallback implementation of platform-specific utilities for non-iOS platforms.
     """
+
     def close_keyboard(widget):
         pass
 
@@ -438,13 +445,13 @@ class PlatformUtils(GenericUtils):
         pass
 
 
-if toga.platform.current_platform == 'iOS':
+if toga.platform.current_platform == "iOS":
     from rubicon.objc import ObjCClass, ObjCInstance
 
     # Load the required Objective-C classes
-    NSURL = ObjCClass('NSURL')
-    NSMutableArray = ObjCClass('NSMutableArray')
-    UIActivityViewController = ObjCClass('UIActivityViewController')
+    NSURL = ObjCClass("NSURL")
+    NSMutableArray = ObjCClass("NSMutableArray")
+    UIActivityViewController = ObjCClass("UIActivityViewController")
     UIAlertController = ObjCClass("UIAlertController")
     UIAlertAction = ObjCClass("UIAlertAction")
 
@@ -452,6 +459,7 @@ if toga.platform.current_platform == 'iOS':
         """
         Native iOS implementation of platform utilities using Objective-C UIKit calls via Rubicon-ObjC.
         """
+
         def close_keyboard(widget):
             """
             Dismisses the soft keyboard by resigning first responder status on UIKit textfield.
@@ -459,7 +467,7 @@ if toga.platform.current_platform == 'iOS':
             :param widget: Native Toga text field widget.
             """
             try:
-                if hasattr(widget, '_impl') and hasattr(widget._impl, 'native'):
+                if hasattr(widget, "_impl") and hasattr(widget._impl, "native"):
                     native_textfield = widget._impl.native
                     native_textfield.resignFirstResponder()
                     print("[UIKit] Keyboard dismissed via resignFirstResponder.")
@@ -481,15 +489,17 @@ if toga.platform.current_platform == 'iOS':
             :type texts: int
             """
             alert = UIAlertController.alertControllerWithTitle(
-                title,
-                message=message,
-                preferredStyle=1
+                title, message=message, preferredStyle=1
             )
 
             for i in range(texts):
                 alert.addTextFieldWithConfigurationHandler_(None)
 
-            handlers = {action[0]: action[1] for action in actions if len(action) > 1 and action[1]}
+            handlers = {
+                action[0]: action[1]
+                for action in actions
+                if len(action) > 1 and action[1]
+            }
 
             def on_done(action_ptr: ObjCInstance) -> None:
                 if (title := str(ObjCInstance(action_ptr).title)) in handlers:
@@ -497,9 +507,13 @@ if toga.platform.current_platform == 'iOS':
                     handlers[title](title, *outputs)
 
             for action in actions:
-                alert.addAction(UIAlertAction.actionWithTitle(action[0], style=0, handler=on_done))
+                alert.addAction(
+                    UIAlertAction.actionWithTitle(action[0], style=0, handler=on_done)
+                )
 
-            w.main_window._impl.native.rootViewController.presentViewController(alert, animated=True, completion=None)
+            w.main_window._impl.native.rootViewController.presentViewController(
+                alert, animated=True, completion=None
+            )
 
         def open_share_sheet(w, html_file_path: str):
             """
@@ -516,20 +530,21 @@ if toga.platform.current_platform == 'iOS':
             share_items.addObject_(file_url)
 
             activity_vc = UIActivityViewController.alloc().initWithActivityItems(
-                share_items,
-                applicationActivities=None
+                share_items, applicationActivities=None
             )
 
             presenting_vc = w.app.main_window._impl.native.rootViewController
 
             if activity_vc.popoverPresentationController:
-                activity_vc.popoverPresentationController.sourceView = presenting_vc.view
-                activity_vc.popoverPresentationController.sourceRect = presenting_vc.view.bounds
+                activity_vc.popoverPresentationController.sourceView = (
+                    presenting_vc.view
+                )
+                activity_vc.popoverPresentationController.sourceRect = (
+                    presenting_vc.view.bounds
+                )
 
             presenting_vc.presentViewController(
-                activity_vc,
-                animated=True,
-                completion=None
+                activity_vc, animated=True, completion=None
             )
 
     Utils = IOSUtils

@@ -18,6 +18,7 @@ import traceback
 from . import db as d
 from . import geography as g
 
+
 class RouteGenerator:
     """Manages background route calculation and UI progress notification."""
 
@@ -33,8 +34,12 @@ class RouteGenerator:
         service_uid = f"{d.Service.__name__}_{id(self)}"
 
         # Connect using dispatch_uid to allow multiple DBListSource instances
-        post_save.connect(self._on_address_save, sender=d.Address, name=f"{address_uid}_save")
-        post_save.connect(self._on_service_save, sender=d.Service, name=f"{service_uid}_save")
+        post_save.connect(
+            self._on_address_save, sender=d.Address, name=f"{address_uid}_save"
+        )
+        post_save.connect(
+            self._on_service_save, sender=d.Service, name=f"{service_uid}_save"
+        )
 
     def register(self, handler):
         self._listeners.append(handler)
@@ -47,7 +52,11 @@ class RouteGenerator:
         for addr in addresses:
             for svc in services:
                 # Only queue missing routes
-                if not d.Route.select().where((d.Route.address == addr) & (d.Route.service == svc)).exists():
+                if (
+                    not d.Route.select()
+                    .where((d.Route.address == addr) & (d.Route.service == svc))
+                    .exists()
+                ):
                     self._queue.put((addr, svc))
         self._ensure_worker_running()
 
@@ -91,14 +100,14 @@ class RouteGenerator:
                 self._notify_ui(is_busy=True)
 
                 # --- YOUR GEOSPATIAL LOGIC PLACEHOLDER ---
-                d.Route.replace(**await self._compute_and_save_route(address, service)).execute()
+                d.Route.replace(
+                    **await self._compute_and_save_route(address, service)
+                ).execute()
                 # ------------------------------------------
             except Exception as e:
                 traceback.print_exc()
                 d.Route.replace(
-                    address=address,
-                    service=service,
-                    error=str(e)
+                    address=address, service=service, error=str(e)
                 ).execute()
             finally:
                 self._queue.task_done()
@@ -111,33 +120,35 @@ class RouteGenerator:
             self.on_progress_update(
                 is_busy,
                 d.Route.select().count(),
-                d.Address.select().count() * d.Service.select().count()
+                d.Address.select().count() * d.Service.select().count(),
             )
         for handler in self._listeners:
-            handler() 
+            handler()
 
     async def _compute_and_save_route(self, address: Address, service: Service) -> dict:
         # Find the first matching service for the location
-        destination = await g.perform_search_at(service.title, address.latitude, address.longitude)
+        destination = await g.perform_search_at(
+            service.title, address.latitude, address.longitude
+        )
         if destination:
-            for m in '🥾🚲🚗':
-                eta = await g.perform_eta((address.latitude, address.longitude), destination[1], m)
-                if eta[1].expectedTravelTime < 11 * 60 or m == '🚗':
-                    eta2 = await g.perform_eta(destination[1], (address.latitude, address.longitude), m)
+            for m in "🥾🚲🚗":
+                eta = await g.perform_eta(
+                    (address.latitude, address.longitude), destination[1], m
+                )
+                if eta[1].expectedTravelTime < 11 * 60 or m == "🚗":
+                    eta2 = await g.perform_eta(
+                        destination[1], (address.latitude, address.longitude), m
+                    )
                     return {
-                        'address': address,
-                        'service': service,
-                        'latitude': destination[1].location.coordinate.latitude,
-                        'longitude': destination[1].location.coordinate.longitude,
-                        'distance': eta[1].distance,
-                        'time': eta[1].expectedTravelTime,
-                        'distance_return': eta2[1].distance,
-                        'time_return': eta2[1].expectedTravelTime, 
-                        'mode': d.TravelMode.from_label(m),
-                        'error': None
+                        "address": address,
+                        "service": service,
+                        "latitude": destination[1].location.coordinate.latitude,
+                        "longitude": destination[1].location.coordinate.longitude,
+                        "distance": eta[1].distance,
+                        "time": eta[1].expectedTravelTime,
+                        "distance_return": eta2[1].distance,
+                        "time_return": eta2[1].expectedTravelTime,
+                        "mode": d.TravelMode.from_label(m),
+                        "error": None,
                     }
-        return {
-            'address': address,
-            'service': service,
-            'error': "No match"
-        }
+        return {"address": address, "service": service, "error": "No match"}
