@@ -10,7 +10,7 @@ import asyncio
 import httpx
 from markdown import markdown as md
 from pathlib import Path
-from rubicon.objc import ObjCInstance
+from rubicon.objc import NSObject, ObjCInstance
 from rubicon.objc.runtime import objc_id
 import toga
 import traceback
@@ -214,6 +214,68 @@ class Prototype:
                 def __init__(self, row, stack):
                     self.row = row
                     self.stack = stack
+                    self.map = ws.DynamicMapView(
+                        d.DBListSource(
+                            d.Route.select().where(
+                                (d.Route.address == row._instance)
+                                & (d.Route.latitude is not None)
+                                & (d.Route.longitude is not None)
+                            )
+                        ),
+                        True,
+                        [
+                            toga.MapPin(
+                                (
+                                    row._instance.latitude,
+                                    row._instance.longitude,
+                                ),
+                                title="🏠",
+                            )
+                        ],
+                        id="view_address_box_map",
+                        flex=1,
+                        location=(
+                            (
+                                row._instance.latitude,
+                                row._instance.longitude,
+                            )
+                        ),
+                        zoom=15,
+                    )
+
+                    class MinimalRouteDelegate(NSObject):
+
+                        @objc_method
+                        def mapView_rendererForOverlay_(self, mapView, overlay):
+                            # Required: MapKit will not render anything if this returns None
+                            return b.MKPolylineRenderer.alloc().initWithPolyline(overlay)
+
+                    native_map = self.map._impl.native
+
+                    # 1. Attach minimal delegate directly (temporarily bypasses Toga's delegate)
+                    delegate = MinimalRouteDelegate.alloc().init()
+                    self._test_delegate = delegate  # Retain reference in Python
+                    native_map.delegate = delegate
+
+                    self.list = toga.DetailedList(
+                        flex=1,
+                        primary_action="View",
+                        on_primary_action=lambda w, row: self.open_directions_in_maps(
+                            row
+                        ),
+                        on_refresh=lambda w: (
+                            d.Route.delete()
+                            .where(d.Route.address == row._instance)
+                            .execute(),
+                            self.app.loop.call_soon(
+                                self.app.routes.trigger_full_recalculate
+                            ),
+                        ),
+                        on_select=self.select_from_list,
+                        data=d.DBListSource(
+                            model_or_query=row._instance.routes
+                        ),
+                    )
                     super().__init__(
                         direction="column",
                         children=[
@@ -223,60 +285,8 @@ class Prototype:
                             ws.LabelledText(
                                 "Subtitle", value_text=row.subtitle, readonly=True
                             ),
-                            ws.DynamicMapView(
-                                d.DBListSource(
-                                    d.Route.select().where(
-                                        (d.Route.address == row._instance)
-                                        & (d.Route.latitude is not None)
-                                        & (d.Route.longitude is not None)
-                                    )
-                                ),
-                                True,
-                                [
-                                    toga.MapPin(
-                                        (
-                                            row._instance.latitude,
-                                            row._instance.longitude,
-                                        ),
-                                        title="🏠",
-                                    )
-                                ],
-                                id="view_address_box_map",
-                                flex=1,
-                                location=(
-                                    (
-                                        row._instance.latitude,
-                                        row._instance.longitude,
-                                    )
-                                ),
-                                zoom=15,
-                            ),
-                            toga.DetailedList(
-                                flex=1,
-                                primary_action="View",
-                                on_primary_action=lambda w, row: self.open_directions_in_maps(
-                                    row
-                                ),
-                                on_refresh=lambda w: (
-                                    d.Route.delete()
-                                    .where(d.Route.address == row._instance)
-                                    .execute(),
-                                    self.app.loop.call_soon(
-                                        self.app.routes.trigger_full_recalculate
-                                    ),
-                                ),
-                                on_select=lambda w: setattr(
-                                    self.app.widgets["view_address_box_map"],
-                                    "location",
-                                    (
-                                        w.selection._instance.latitude,
-                                        w.selection._instance.longitude,
-                                    ),
-                                ),
-                                data=d.DBListSource(
-                                    model_or_query=row._instance.routes
-                                ),
-                            ),
+                            self.map,
+                            self.list,
                             toga.Row(
                                 children=[
                                     toga.Button(
@@ -291,6 +301,24 @@ class Prototype:
                         ],
                         flex=1,
                     )
+
+                def select_from_list(self, widget, row):
+                    route = widget.selection._instance
+                    if route.latitude and route.longitude:
+                        self.map.location = (route.latitude, route.longitude)
+
+                        def add_overlay(response, direction):
+                            if response and len(routes := list(response.routes)) > 0:
+                                self.map._impl.native.add_overlay(routes[0].polyline)
+
+                        g.perform_directions_request(
+                            route.address.latitude,
+                            route.address.longitude,
+                            route.latitude,
+                            route.longitude,
+                            route.mode.label,
+                            add_overlay
+                        ),
 
                 def open_directions_in_maps(self, row):
                     """
