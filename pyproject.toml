@@ -1,16 +1,18 @@
 [project]
 name = "liveability"
-description = "Template for an application"
+description = "Location comparison tool"
+version = "0.0.1"
 dependencies = [
     "markdown",
     "peewee",
+    "requests",
     "tomlkit"
 ]
 
 [tool.stub_launcher]
 display_name = "Liveability"  # Overrides the folder/project name in the list
 entry_point = "src/liveability/__main__.py"          # The script file the launcher should execute
-#icon = "assets/custom_icon.png"       # Relative path to this prototype's icon
+icon = "assets/custom_icon.png"       # Relative path to this prototype's icon
 
 # This project was generated with 0.4.2 using template: https://github.com/beeware/briefcase-template @ v0.4.2
 [tool.briefcase]
@@ -25,8 +27,9 @@ author_email = "jkingok@users.noreply.github.com"
 
 [tool.briefcase.app.liveability]
 formal_name = "Liveability"
-description = "Template for an application"
-long_description = """More details about the app should go here.
+description = "Location comparison tool"
+long_description = """Add services and addresses for locations you care about and the tool will use Apple Maps
+to calculate ETAs between each allowing you to compare their liveability.
 """
 sources = [
     "src/liveability",
@@ -37,11 +40,15 @@ test_sources = [
 
 requires = [
     "markdown",
+    "peewee",
+    "requests",
     "tomlkit"
 ]
 test_requires = [
     "pytest",
 ]
+icon="assets/icon"
+splash_background_color="#000000"
 
 [tool.briefcase.app.liveability.macOS]
 universal_build = true
