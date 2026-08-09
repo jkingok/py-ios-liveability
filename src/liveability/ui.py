@@ -231,7 +231,7 @@ class Prototype:
                                         & (d.Route.longitude is not None)
                                     )
                                 ),
-                                False,
+                                True,
                                 [
                                     toga.MapPin(
                                         (
