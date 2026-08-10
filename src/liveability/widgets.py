@@ -8,9 +8,7 @@ dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via
 
 import asyncio
 import math
-import math
 from pathlib import Path
-import sys
 import toga
 from toga.sources import ListSource, Row
 from typing import Any
@@ -88,7 +86,7 @@ class DynamicMapView(toga.MapView):
         self.zoom = calculated_zoom
 
         # Or, zoom to fit all pins
-        #if sys.platform == "ios":
+        # if sys.platform == "ios":
         #    (mkmap := self._impl.native).showAnnotations(mkmap.annotations, animated=True)
 
     # --- Helper for Row -> Pin Conversion ---
@@ -98,7 +96,9 @@ class DynamicMapView(toga.MapView):
             lat = row._instance.latitude
             lon = row._instance.longitude
 
-            return toga.MapPin(location=(lat, lon), title=row.title, subtitle=row.subtitle)
+            return toga.MapPin(
+                location=(lat, lon), title=row.title, subtitle=row.subtitle
+            )
         else:
             return None
 
@@ -117,7 +117,7 @@ class DynamicMapView(toga.MapView):
     def source_insert(self, index: int, item) -> None:
         """Single item added."""
         pin = self._create_pin_from_row(item)
-        if pin: 
+        if pin:
             self._pin_map[id(item)] = pin
             self._pin_src[id(pin)] = item
             self.pins.add(pin)

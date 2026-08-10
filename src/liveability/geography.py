@@ -6,7 +6,7 @@ travel time estimates (`MKDirectionsRequest`), and launches target locations in 
 """
 
 import sys
-from typing import Callable
+from typing import Any, Callable
 
 if sys.platform == "ios":
     from rubicon.objc import Block, ObjCClass, ObjCInstance
@@ -14,7 +14,6 @@ if sys.platform == "ios":
     import toga
 
     from . import bridge as b
-
 
     def open_in_maps(items: list[tuple[float, float, str]], mode=None) -> bool:
         """
@@ -60,7 +59,6 @@ if sys.platform == "ios":
             [MKMapItemMake(*item) for item in items], launchOptions=lo
         )
 
-
     def generic_completion(response_ptr, error_ptr, future):
         if future.done():
             return
@@ -73,7 +71,6 @@ if sys.platform == "ios":
         else:
             response = ObjCInstance(response_ptr)
             toga.App.app.loop.call_soon_threadsafe(future.set_result, response)
-
 
     def format_eta(
         mode: str,
@@ -105,7 +102,6 @@ if sys.platform == "ios":
         else:
             return f"By {mode} in {minutes} and {metres}"
 
-
     async def perform_search_at(
         search_string: str, latitude: float, longitude: float
     ) -> tuple[str, ObjCInstance | None]:
@@ -132,7 +128,10 @@ if sys.platform == "ios":
         future = toga.App.app.loop.create_future()
         b.MKLocalSearch.alloc().initWithRequest(request).startWithCompletionHandler(
             Block(
-                lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id
+                lambda r, e, f=future: generic_completion(r, e, f),
+                None,
+                objc_id,
+                objc_id,
             )
         )
         mapItems = list((await future).mapItems)
@@ -150,7 +149,6 @@ if sys.platform == "ios":
 
             sorted_items = sorted(mapItems, key=get_distance)
             return (sorted_items[0].name, sorted_items[0])
-
 
     async def perform_eta(
         fro: ObjCInstance | tuple[float, float],
@@ -189,7 +187,10 @@ if sys.platform == "ios":
         future = toga.App.app.loop.create_future()
         directions_calculator.calculateETAWithCompletionHandler(
             Block(
-                lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id
+                lambda r, e, f=future: generic_completion(r, e, f),
+                None,
+                objc_id,
+                objc_id,
             )
         )
         response = await future
@@ -265,31 +266,22 @@ if sys.platform == "ios":
         future = toga.App.app.loop.create_future()
         directions_calculator.calculateDirectionsWithCompletionHandler(
             Block(
-                lambda r, e, f=future: generic_completion(r, e, f), None, objc_id, objc_id
+                lambda r, e, f=future: generic_completion(r, e, f),
+                None,
+                objc_id,
+                objc_id,
             )
         )
         response = await future
 
-        callback(response, True)
+        callback(response, both)
 
         if both:
-            # Now calculate return journey
-            request.source, request.destination = request.destination, request.source
+            # Recurse back in
+            await perform_directions(to, fro, mode, callback, False)
 
-            directions_calculator = b.MKDirections.alloc().initWithRequest(request)
-            future = toga.App.app.loop.create_future()
-            directions_calculator.calculateETAWithCompletionHandler(
-                Block(
-                    lambda r, e, f=future: generic_completion(r, e, f),
-                    None,
-                    objc_id,
-                    objc_id,
-                )
-            )
-            response = await future
-
-            callback(response, False)
 else:
+
     def open_in_maps(items: list[tuple[float, float, str]], mode=None) -> bool:
         return False
 
@@ -300,7 +292,7 @@ else:
         time2: float | None = None,
         distance2: float | None = None,
     ) -> str:
-        minutes = str(int(time/60))
+        minutes = str(int(time / 60))
         metres = str(int(distance))
 
         if (
@@ -309,7 +301,7 @@ else:
             and ((time3 := abs(time2 - time)) > 60)
             and (((distance3 := abs(distance2 - distance)) / distance) > 0.1)
         ):
-            minutes2 = str(int(time3/60))
+            minutes2 = str(int(time3 / 60))
             metres2 = str(int(distance3))
             return f"By {mode} in {minutes} ({'+' if time3 > 0 else '-'}{minutes2}) and {metres} ({'+' if distance3 > 0 else '-'}{metres2})"
         else:

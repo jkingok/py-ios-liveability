@@ -11,7 +11,7 @@ import sys
 import httpx
 from markdown import markdown as md
 from pathlib import Path
-from rubicon.objc import NSObject, ObjCInstance, objc_method
+from rubicon.objc import NSObject, ObjCInstance, objc_method, objc_property, SEL
 from rubicon.objc.runtime import objc_id
 import toga
 import traceback
@@ -245,19 +245,74 @@ class Prototype:
                     )
 
                     if sys.platform == "ios":
-                        class MinimalRouteDelegate(NSObject):
+
+                        class RouteMapDelegateProxy(NSObject):
+                            toga_delegate = objc_property(object, weak=True)
 
                             @objc_method
-                            def mapView_rendererForOverlay_(self, mapView: b.MKMapView, overlay: b.MKOverlay) -> b.MKPolylineRenderer:
-                                # Required: MapKit will not render anything if this returns None
-                                return b.MKPolylineRenderer.alloc().initWithPolyline(overlay)
+                            def mapView_rendererForOverlay_(
+                                self, mapView: ObjCInstance, overlay: ObjCInstance
+                            ) -> ObjCInstance:
+                                print(f"rendering overlay for {overlay.title}...")
+                                if overlay.isKindOfClass_(b.MKPolyline):
+                                    renderer = (
+                                        b.MKPolylineRenderer.alloc().initWithPolyline_(
+                                            overlay
+                                        )
+                                    )
+
+                                    # System Blue works on both UIColor (iOS) and NSColor (macOS)
+                                    renderer.strokeColor = (
+                                        b.UIColor.systemBlueColor()
+                                        if "out" in str(overlay.title)
+                                        else b.UIColor.systemCyanColor()
+                                    )
+                                    renderer.lineWidth = 5.0
+                                    return renderer
+
+                                if (
+                                    self.toga_delegate
+                                    and self.toga_delegate.respondsToSelector_(
+                                        SEL("mapView:rendererForOverlay:")
+                                    )
+                                ):
+                                    return (
+                                        self.toga_delegate.mapView_rendererForOverlay_(
+                                            mapView, overlay
+                                        )
+                                    )
+
+                                return None
+
+                        @objc_method
+                        def respondsToSelector_(self, selector: SEL) -> bool:
+                            sel_str = str(selector)
+                            if sel_str == "mapView:rendererForOverlay:":
+                                return True
+                            if self.toga_delegate:
+                                return self.toga_delegate.respondsToSelector_(selector)
+                            return False
+
+                            @objc_method
+                            def forwardingTargetForSelector_(
+                                self, selector: SEL
+                            ) -> ObjCInstance:
+                                return self.toga_delegate
 
                         native_map = self.map._impl.native
 
-                        # 1. Attach minimal delegate directly (temporarily bypasses Toga's delegate)
-                        delegate = MinimalRouteDelegate.alloc().init()
-                        self._test_delegate = delegate  # Retain reference in Python
-                        native_map.delegate = delegate
+                        # 1. Grab Toga's original self-delegated instance (TogaMapView)
+                        original_toga_delegate = native_map.delegate
+
+                        # 2. Instantiate our proxy and assign Toga's delegate to it
+                        proxy = RouteMapDelegateProxy.alloc().init()
+                        proxy.toga_delegate = original_toga_delegate
+
+                        # 3. Retain a strong reference on the Python widget to prevent garbage collection
+                        self.map._route_proxy = proxy
+
+                        # 4. Point MKMapView delegate to our proxy
+                        native_map.delegate = proxy
 
                     self.list = toga.DetailedList(
                         flex=1,
@@ -274,9 +329,7 @@ class Prototype:
                             ),
                         ),
                         on_select=self.select_from_list,
-                        data=d.DBListSource(
-                            model_or_query=row._instance.routes
-                        ),
+                        data=d.DBListSource(model_or_query=row._instance.routes),
                     )
                     super().__init__(
                         direction="column",
@@ -304,21 +357,29 @@ class Prototype:
                         flex=1,
                     )
 
-                def add_overlay(self, response, direction):
+                def add_overlay(self, response, first):
                     if response and len(routes := list(response.routes)) > 0:
-                        self.map._impl.native.add_overlay(routes[0].polyline)
+                        while first and (overlays := self.map._impl.native.overlays):
+                            self.map._impl.native.removeOverlay_(overlays[0])
+                        overlay = routes[0].polyline
+                        overlay.title = "out" if first else "in"
+                        print(f"adding overlay for {overlay.title}...")
+                        self.map._impl.native.addOverlay_(overlay)
 
                 def select_from_list(self, widget, **kwargs):
                     route = widget.selection._instance
                     if route.latitude and route.longitude:
                         self.map.location = (route.latitude, route.longitude)
 
-                        asyncio.create_task(g.perform_directions(
-                            (route.address.latitude, route.address.longitude),
-                            (route.latitude, route.longitude),
-                            route.mode.label,
-                            self.add_overlay
-                        ))
+                        asyncio.create_task(
+                            g.perform_directions(
+                                (route.address.latitude, route.address.longitude),
+                                (route.latitude, route.longitude),
+                                route.mode.label,
+                                self.add_overlay,
+                                True,
+                            )
+                        )
 
                 def open_directions_in_maps(self, row):
                     """

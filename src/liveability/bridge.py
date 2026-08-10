@@ -4,6 +4,7 @@ Objective-C bridge interface for Apple CoreLocation, MapKit, and UIKit framework
 Uses Rubicon-ObjC to bind native iOS C-functions, Objective-C classes, and struct encodings
 required for geocoding, spatial searches, travel directions, date formatting, and pasteboard access.
 """
+
 import sys
 
 if sys.platform == "ios":
@@ -12,10 +13,8 @@ if sys.platform == "ios":
     from rubicon.objc.runtime import load_library
     from rubicon.objc.types import ctype_for_encoding
 
-
     def constant(name):
         return ObjCInstance(ctypes.c_void_p.in_dll(ctypes.CDLL(None), name))
-
 
     #: C-struct representation for 2D geographic coordinates (`{CLLocationCoordinate2D=dd}`).
     CLLocationCoordinate2D = ctype_for_encoding(b"{CLLocationCoordinate2D=dd}")
@@ -72,8 +71,8 @@ if sys.platform == "ios":
     #: Objective-C proxy class for MapKit ``MKMapView``.
     MKMapView = ObjCClass("MKMapView")
 
-    #: Objective-C proxy class for MapKit ``MKOverlay``.
-    MKOverlay = ObjCClass("MKOverlay")
+    #: Objective-C proxy class for MapKit ``MKPolyline``.
+    MKPolyline = ObjCClass("MKPolyline")
 
     #: Objective-C proxy class for MapKit ``MKPolylineRenderer``.
     MKPolylineRenderer = ObjCClass("MKPolylineRenderer")
@@ -83,6 +82,9 @@ if sys.platform == "ios":
 
     #: Objective-C proxy class for Foundation ``NSDateComponentsFormatter``.
     NSDateComponentsFormatter = ObjCClass("NSDateComponentsFormatter")
+
+    #: Objective-C proxy class for UIKit ``UIColor``.
+    UIColor = ObjCClass("UIColor")
 
     #: Objective-C proxy class for UIKit ``UIPasteboard``.
     UIPasteboard = ObjCClass("UIPasteboard")
