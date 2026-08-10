@@ -11,7 +11,7 @@ import sys
 import httpx
 from markdown import markdown as md
 from pathlib import Path
-from rubicon.objc import NSObject, ObjCInstance
+from rubicon.objc import NSObject, ObjCInstance, objc_method
 from rubicon.objc.runtime import objc_id
 import toga
 import traceback
@@ -304,20 +304,20 @@ class Prototype:
                         flex=1,
                     )
 
+                def add_overlay(self, response, direction):
+                    if response and len(routes := list(response.routes)) > 0:
+                        self.map._impl.native.add_overlay(routes[0].polyline)
+
                 def select_from_list(self, widget, **kwargs):
                     route = widget.selection._instance
                     if route.latitude and route.longitude:
                         self.map.location = (route.latitude, route.longitude)
 
-                        def add_overlay(response, direction):
-                            if response and len(routes := list(response.routes)) > 0:
-                                self.map._impl.native.add_overlay(routes[0].polyline)
-
                         asyncio.create_task(g.perform_directions(
                             (route.address.latitude, route.address.longitude),
                             (route.latitude, route.longitude),
                             route.mode.label,
-                            add_overlay
+                            self.add_overlay
                         ))
 
                 def open_directions_in_maps(self, row):
