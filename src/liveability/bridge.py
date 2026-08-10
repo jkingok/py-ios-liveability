@@ -69,6 +69,12 @@ if sys.platform == "ios":
     #: Objective-C proxy class for MapKit ``MKMapItem``.
     MKMapItem = ObjCClass("MKMapItem")
 
+    #: Objective-C proxy class for MapKit ``MKMapView``.
+    MKMapView = ObjCClass("MKMapView")
+
+    #: Objective-C proxy class for MapKit ``MKOverlay``.
+    MKOverlay = ObjCClass("MKOverlay")
+
     #: Objective-C proxy class for MapKit ``MKPolylineRenderer``.
     MKPolylineRenderer = ObjCClass("MKPolylineRenderer")
 

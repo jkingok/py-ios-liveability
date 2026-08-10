@@ -7,6 +7,7 @@ and "Help" (rendered Markdown documentation webview).
 """
 
 import asyncio
+import sys
 import httpx
 from markdown import markdown as md
 from pathlib import Path
@@ -243,19 +244,20 @@ class Prototype:
                         zoom=15,
                     )
 
-                    class MinimalRouteDelegate(NSObject):
+                    if sys.platform == "ios":
+                        class MinimalRouteDelegate(NSObject):
 
-                        @objc_method
-                        def mapView_rendererForOverlay_(self, mapView, overlay):
-                            # Required: MapKit will not render anything if this returns None
-                            return b.MKPolylineRenderer.alloc().initWithPolyline(overlay)
+                            @objc_method
+                            def mapView_rendererForOverlay_(self, mapView: b.MKMapView, overlay: b.MKOverlay) -> b.MKPolylineRenderer:
+                                # Required: MapKit will not render anything if this returns None
+                                return b.MKPolylineRenderer.alloc().initWithPolyline(overlay)
 
-                    native_map = self.map._impl.native
+                        native_map = self.map._impl.native
 
-                    # 1. Attach minimal delegate directly (temporarily bypasses Toga's delegate)
-                    delegate = MinimalRouteDelegate.alloc().init()
-                    self._test_delegate = delegate  # Retain reference in Python
-                    native_map.delegate = delegate
+                        # 1. Attach minimal delegate directly (temporarily bypasses Toga's delegate)
+                        delegate = MinimalRouteDelegate.alloc().init()
+                        self._test_delegate = delegate  # Retain reference in Python
+                        native_map.delegate = delegate
 
                     self.list = toga.DetailedList(
                         flex=1,
@@ -302,7 +304,7 @@ class Prototype:
                         flex=1,
                     )
 
-                def select_from_list(self, widget, row):
+                def select_from_list(self, widget, **kwargs):
                     route = widget.selection._instance
                     if route.latitude and route.longitude:
                         self.map.location = (route.latitude, route.longitude)
@@ -311,14 +313,12 @@ class Prototype:
                             if response and len(routes := list(response.routes)) > 0:
                                 self.map._impl.native.add_overlay(routes[0].polyline)
 
-                        g.perform_directions_request(
-                            route.address.latitude,
-                            route.address.longitude,
-                            route.latitude,
-                            route.longitude,
+                        asyncio.create_task(g.perform_directions(
+                            (route.address.latitude, route.address.longitude),
+                            (route.latitude, route.longitude),
                             route.mode.label,
                             add_overlay
-                        ),
+                        ))
 
                 def open_directions_in_maps(self, row):
                     """
