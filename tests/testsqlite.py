@@ -2,7 +2,7 @@ import sqlite3
 import toga
 
 # File paths
-db_file = toga.App.app.paths.data / "Liveability.db"
+db_file = toga.App.app.paths.data / "Place Compare.db"
 
 # Standard query joining address and route
 debug_sql = """

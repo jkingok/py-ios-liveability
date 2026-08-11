@@ -1,4 +1,4 @@
-# Liveability
+# Place Compare
 
 This app helps you compare locations with respect to the availability of common services and the means of transport required to access them in a reasonable time.
 
