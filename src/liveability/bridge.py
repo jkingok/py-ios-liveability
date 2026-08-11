@@ -13,6 +13,7 @@ if sys.platform == "ios":
     from rubicon.objc import ObjCClass, ObjCInstance
     from rubicon.objc.runtime import load_library
     from rubicon.objc.types import ctype_for_encoding
+    import toga as _
 
     _tl = sys.modules["toga_iOS.libs"]
 

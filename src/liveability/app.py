@@ -10,8 +10,6 @@ import sys
 import toga
 import traceback
 
-from . import ui
-
 
 class LogRedirector:
     """
@@ -62,6 +60,8 @@ class MyApp(toga.App):
             app.main_window = toga.MainWindow(title=app.formal_name)
 
         try:
+            from . import ui
+
             app.proto = ui.Prototype(
                 host_app=app, on_done=lambda _: MyApp.unstack_from(app)
             )
