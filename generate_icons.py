@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import os
 from PIL import Image
 
@@ -35,8 +37,8 @@ def generate_contained_icons(source_path: str, output_dir: str, sizes: list[int]
                 # Resampling choice: Lanczos is preferred for high-quality downscaling
                 resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
                 
-                # 3. Create a brand new transparent square canvas
-                square_canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+                # 3. Create a brand new opaque square canvas
+                square_canvas = Image.new("RGB", (size, size), (127, 127, 127))
                 
                 # 4. Calculate centering coordinates
                 paste_x = (size - new_width) // 2
