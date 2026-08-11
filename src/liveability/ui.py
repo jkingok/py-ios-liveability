@@ -42,7 +42,7 @@ class Prototype:
     def __init__(self, host_app, on_done):
         self.app = host_app
         self.on_done_callback = on_done  # This is your ticket back to safety
-        self.title = "Liveability"  # host_app.formal_name
+        self.title = "Place Compare"  # host_app.formal_name
         self.app.settings = s.Settings(host_app.paths)
         # self.app.functions = f.Functions(host_app.paths, self.app.settings)
         # self.app.addresses = m.AddressModel(host_app.paths, self.app.functions)
