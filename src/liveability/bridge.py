@@ -8,10 +8,13 @@ required for geocoding, spatial searches, travel directions, date formatting, an
 import sys
 
 if sys.platform == "ios":
+
     import ctypes
     from rubicon.objc import ObjCClass, ObjCInstance
     from rubicon.objc.runtime import load_library
     from rubicon.objc.types import ctype_for_encoding
+
+    _tl = sys.modules["toga_iOS.libs"]
 
     def constant(name):
         return ObjCInstance(ctypes.c_void_p.in_dll(ctypes.CDLL(None), name))
@@ -34,9 +37,10 @@ if sys.platform == "ios":
     mk = load_library("MapKit")
 
     #: C-struct representation for map coordinate regions (`{MKCoordinateRegion=...}`).
-    MKCoordinateRegion = ctype_for_encoding(
-        b"{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}}"
-    )
+    # MKCoordinateRegion = ctype_for_encoding(
+    #    b"{MKCoordinateRegion={CLLocationCoordinate2D=dd}{MKCoordinateSpan=dd}}"
+    # )
+    MKCoordinateRegion = _tl.MKCoordinateRegion
 
     #: Native C function pointer to ``MKCoordinateRegionMakeWithDistance``.
     MKCoordinateRegionMakeWithDistance = mk.MKCoordinateRegionMakeWithDistance

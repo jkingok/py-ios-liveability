@@ -121,11 +121,6 @@ if sys.platform == "ios":
 
         fro = b.CLLocationCoordinate2DMake(latitude, longitude)
         fro2 = b.CLLocation.alloc().initWithLatitude(latitude, longitude=longitude)
-        print([
-            m
-            for m in sys.modules
-            if "MKCoordinateRegion" in getattr(sys.modules[m], "__dict__", {})
-        ])
         request.region = b.MKCoordinateRegionMakeWithDistance(fro, 10000.0, 10000.0)
         request.regionPriority = 1  # MKLocalSearchRegionPriorityRequired
 
