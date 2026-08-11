@@ -4,7 +4,7 @@
 export SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # Configuration Definitions
-PROJECT_NAME="$(sed -n -e 's/^formal_name = "\(.*\)"$/\1/p' ${SCRIPT_DIR}/pyproject.toml | sed -e 's/ //g')"
+PROJECT_NAME="$(sed -n -e 's/^formal_name = "\(.*\)"$/\1/p' ${SCRIPT_DIR}/pyproject.toml)"
 PROJECT_ROOT="${SCRIPT_DIR}"
 
 cd "$PROJECT_ROOT"
