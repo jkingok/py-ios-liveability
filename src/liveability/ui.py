@@ -9,7 +9,6 @@ and "Help" (rendered Markdown documentation webview).
 import asyncio
 import sys
 import traceback
-from typing import cast
 import urllib
 from pathlib import Path
 
@@ -20,6 +19,47 @@ from markdown import markdown as md
 if sys.platform == "ios":
     from rubicon.objc import SEL, NSObject, ObjCInstance, objc_method, objc_property
     from rubicon.objc.runtime import objc_id
+
+    class RouteMapDelegateProxy(NSObject):
+        toga_delegate = objc_property(object, weak=True)
+
+        @objc_method
+        def mapView_rendererForOverlay_(
+            self, mapView: ObjCInstance, overlay: ObjCInstance
+        ) -> ObjCInstance:
+            print(f"rendering overlay for {overlay.title}...")
+            if overlay.isKindOfClass_(b.MKPolyline):
+                renderer = b.MKPolylineRenderer.alloc().initWithPolyline_(overlay)
+
+                # System Blue works on both UIColor (iOS) and NSColor (macOS)
+                renderer.strokeColor = (
+                    b.UIColor.systemBlueColor()
+                    if "out" in str(overlay.title)
+                    else b.UIColor.systemCyanColor()
+                )
+                renderer.lineWidth = 5.0
+                return renderer
+
+            if self.toga_delegate and self.toga_delegate.respondsToSelector_(
+                SEL("mapView:rendererForOverlay:")
+            ):
+                return self.toga_delegate.mapView_rendererForOverlay_(mapView, overlay)
+
+            return None
+
+        @objc_method
+        def respondsToSelector_(self, selector: SEL) -> bool:
+            sel_str = selector.name
+            if sel_str == b"mapView:rendererForOverlay:":
+                return True
+            if self.toga_delegate:
+                return self.toga_delegate.respondsToSelector_(selector)
+            return False
+
+        @objc_method
+        def forwardingTargetForSelector_(self, selector: SEL) -> ObjCInstance:
+            return self.toga_delegate
+
 
 from . import bridge as b
 from . import db as d
@@ -89,6 +129,7 @@ class Prototype:
         :type url: str | None
         """
         if sys.platform == "ios":
+
             def record_item(mi):
                 d.Address.create(
                     title=str(mi.name),
@@ -216,6 +257,7 @@ class Prototype:
                 """
 
                 def __init__(self, parent, row, stack):
+                    self.proto = parent
                     self.row = row
                     self.stack = stack
                     self.map = ws.DynamicMapView(
@@ -249,59 +291,6 @@ class Prototype:
 
                     if sys.platform == "ios":
 
-                        class RouteMapDelegateProxy(NSObject):
-                            toga_delegate = objc_property(object, weak=True)
-
-                            @objc_method
-                            def mapView_rendererForOverlay_(
-                                self, mapView: ObjCInstance, overlay: ObjCInstance
-                            ) -> ObjCInstance:
-                                print(f"rendering overlay for {overlay.title}...")
-                                if overlay.isKindOfClass_(b.MKPolyline):
-                                    renderer = (
-                                        b.MKPolylineRenderer.alloc().initWithPolyline_(
-                                            overlay
-                                        )
-                                    )
-
-                                    # System Blue works on both UIColor (iOS) and NSColor (macOS)
-                                    renderer.strokeColor = (
-                                        b.UIColor.systemBlueColor()
-                                        if "out" in str(overlay.title)
-                                        else b.UIColor.systemCyanColor()
-                                    )
-                                    renderer.lineWidth = 5.0
-                                    return renderer
-
-                                if (
-                                    self.toga_delegate
-                                    and self.toga_delegate.respondsToSelector_(
-                                        SEL("mapView:rendererForOverlay:")
-                                    )
-                                ):
-                                    return (
-                                        self.toga_delegate.mapView_rendererForOverlay_(
-                                            mapView, overlay
-                                        )
-                                    )
-
-                                return None
-
-                        @objc_method
-                        def respondsToSelector_(self, selector: SEL) -> bool:
-                            sel_str = str(selector)
-                            if sel_str == "mapView:rendererForOverlay:":
-                                return True
-                            if self.toga_delegate:
-                                return self.toga_delegate.respondsToSelector_(selector)
-                            return False
-
-                            @objc_method
-                            def forwardingTargetForSelector_(
-                                self, selector: SEL
-                            ) -> ObjCInstance:
-                                return self.toga_delegate
-
                         native_map = self.map._impl.native
 
                         # 1. Grab Toga's original self-delegated instance (TogaMapView)
@@ -320,17 +309,9 @@ class Prototype:
                     self.list = toga.DetailedList(
                         flex=1,
                         primary_action="View",
-                        on_primary_action=cast(toga.DetailedList.OnPrimaryActionHandler, lambda w, row: self.open_directions_in_maps(
+                        on_primary_action=lambda widget, row, **kwargs: self.open_directions_in_maps(
                             row
-                        )),
-                        on_refresh=cast(toga.DetailedList.OnRefreshActionHandler, lambda w: (
-                            d.Route.delete()
-                            .where(d.Route.address == row._instance)
-                            .execute(),
-                            self.app.loop.call_soon(
-                                parent.routes.trigger_full_recalculate
-                            ) if self.app else None,
-                        )),
+                        ),
                         on_select=self.select_from_list,
                         data=d.DBListSource(model_or_query=row._instance.routes),
                     )
@@ -350,15 +331,24 @@ class Prototype:
                                     toga.Button(
                                         "Back",
                                         flex=1,
-                                        on_press=lambda _: self.app.widgets[
-                                            self.stack
-                                        ].pop() if self.app else None,
+                                        on_press=lambda _: (
+                                            self.app.widgets[self.stack].pop()
+                                            if self.app
+                                            else None
+                                        ),
                                     ),
                                 ]
                             ),
                         ],
                         flex=1,
                     )
+
+                def refresh_address_routes(self, address):
+                    d.Route.delete().where(d.Route.address == address).execute()
+                    if self.app:
+                        self.app.loop.call_soon(
+                            self.proto.routes.trigger_full_recalculate
+                        )
 
                 def add_overlay(self, response, first):
                     if response and len(routes := list(response.routes)) > 0:
@@ -449,9 +439,11 @@ class Prototype:
                                     toga.Button(
                                         "Back",
                                         flex=1,
-                                        on_press=lambda _: self.app.widgets[
-                                            self.stack
-                                        ].pop() if self.app else None,
+                                        on_press=lambda _: (
+                                            self.app.widgets[self.stack].pop()
+                                            if self.app
+                                            else None
+                                        ),
                                     ),
                                     toga.Button(
                                         "Save",
@@ -460,19 +452,31 @@ class Prototype:
                                             setattr(
                                                 self.row._instance,
                                                 "name",
-                                                self.app.widgets[
-                                                    "edit_service_name"
-                                                ].value if self.app else "",
+                                                (
+                                                    self.app.widgets[
+                                                        "edit_service_name"
+                                                    ].value
+                                                    if self.app
+                                                    else ""
+                                                ),
                                             ),
                                             setattr(
                                                 self.row._instance,
                                                 "emoji",
-                                                self.app.widgets[
-                                                    "edit_service_emoji"
-                                                ].value if self.app else "",
+                                                (
+                                                    self.app.widgets[
+                                                        "edit_service_emoji"
+                                                    ].value
+                                                    if self.app
+                                                    else ""
+                                                ),
                                             ),
                                             self.row._instance.save(),
-                                            self.app.widgets[self.stack].pop() if self.app else None,
+                                            (
+                                                self.app.widgets[self.stack].pop()
+                                                if self.app
+                                                else None
+                                            ),
                                         ),
                                     ),
                                 ]
@@ -505,14 +509,16 @@ class Prototype:
                                 toga.DetailedList(
                                     flex=1,
                                     primary_action="View",
-                                    on_primary_action=cast(toga.DetailedList.OnPrimaryActionHandler, lambda w, row: self.open_address_in_maps(
+                                    on_primary_action=lambda widget, row, **kwargs: self.open_address_in_maps(
                                         row
-                                    )),
+                                    ),
                                     secondary_action="Delete",
-                                    on_secondary_action=cast(toga.DetailedList.OnSecondaryActionHandler, lambda w, row: row._instance.delete_instance()),
+                                    on_secondary_action=lambda widget, row, **kwargs: row._instance.delete_instance(),
                                     on_select=lambda w: self.app.widgets[
                                         "stack_list"
-                                    ].push(ViewAddressBox(self, w.selection, "stack_list")),
+                                    ].push(
+                                        ViewAddressBox(self, w.selection, "stack_list")
+                                    ),
                                     accessors=("title", "summary", "icon"),
                                     data=d.DBListSource.create_address_summary(),  # d.DBListSource(d.Address.get_summary_list(), ['title', 'subtitle', 'summary', 'icon'], related_models=[d.Route])
                                 ),
@@ -561,7 +567,7 @@ class Prototype:
                                 toga.DetailedList(
                                     flex=1,
                                     secondary_action="Delete",
-                                    on_secondary_action=cast(toga.DetailedList.OnSecondaryActionHandler, lambda w, row: row._instance.delete_instance()),
+                                    on_secondary_action=lambda widget, row, **kwargs: row._instance.delete_instance(),
                                     on_select=lambda w: self.app.widgets[
                                         "stack_setup"
                                     ].push(EditServiceBox(w.selection, "stack_setup")),
@@ -595,10 +601,10 @@ class Prototype:
   <meta charset="UTF-8">
   <!-- Configures iOS viewport: sets width, prevents horizontal scroll, and fits notch/home indicator areas -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  
+
   <!-- Informs the browser that the site supports both light and dark system themes -->
   <meta name="color-scheme" content="light dark">
-  
+
   <title>Embedded Content</title>
 
   <style>
@@ -623,7 +629,7 @@ class Prototype:
       color: var(--text-color);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       line-height: 1.5;
-      
+
       /* Ensures text wraps properly when zoomed */
       overflow-wrap: break-word;
       word-break: break-word;
@@ -649,7 +655,7 @@ class Prototype:
                     ),
                 ],
             )
-        except Exception as e: # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             self._error("UI Error", f"{e!s}, see log.")
 

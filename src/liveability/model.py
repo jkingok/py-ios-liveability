@@ -134,7 +134,7 @@ class RouteGenerator:
         if destination:
             for m in "🥾🚲🚗":
                 _, eta = await g.perform_eta(
-                    (address.latitude, address.longitude), destination[1], m
+                    (address.latitude, address.longitude), destination, m
                 )
                 if eta and (eta.expectedTravelTime < 11 * 60 or m == "🚗"):
                     _, eta2 = await g.perform_eta(
@@ -148,7 +148,9 @@ class RouteGenerator:
                         "distance": eta.distance,
                         "time": eta.expectedTravelTime,
                         "distance_return": eta2.distance if eta2 else eta.distance,
-                        "time_return": eta2.expectedTravelTime if eta2 else eta.expectedTravelTime,
+                        "time_return": (
+                            eta2.expectedTravelTime if eta2 else eta.expectedTravelTime
+                        ),
                         "mode": d.TravelMode.from_label(m),
                         "error": None,
                     }

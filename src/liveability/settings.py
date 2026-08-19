@@ -55,7 +55,8 @@ class Settings:
         """
         Persists the current in-memory TOML configuration document to disk.
         """
-        self.config_file.write_text(tomlkit.dumps(self.config_doc))
+        if self.config_doc:
+            self.config_file.write_text(tomlkit.dumps(self.config_doc))
 
     def get(self, k):
         """
@@ -66,7 +67,7 @@ class Settings:
         :returns: Value corresponding to the key.
         """
         self.load()  # allow on-disk changes
-        return self.config_doc[k]
+        return self.config_doc[k] if self.config_doc else None
 
     def set(self, k, v):
         """
@@ -76,5 +77,6 @@ class Settings:
         :type k: str
         :param v: Value to assign to the key.
         """
-        self.config_doc[k] = v
-        self.save()  # preserve immediately
+        if self.config_doc:
+            self.config_doc[k] = v
+            self.save()  # preserve immediately

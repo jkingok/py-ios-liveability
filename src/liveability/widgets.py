@@ -52,7 +52,7 @@ class DynamicMapView(toga.MapView):
             # self.source_change(data)
             for p in self.fixed_pins:
                 self.pins.add(p)
-            for idx, row in enumerate(data): # pyright: ignore [reportArgumentType]
+            for idx, row in enumerate(data):  # pyright: ignore [reportArgumentType]
                 self.source_insert(idx, row)
             data.add_listener(self)
 
@@ -63,7 +63,7 @@ class DynamicMapView(toga.MapView):
         if not self.auto_center or not self._pin_map:
             return
 
-        pins = list(self._pin_map.values())
+        pins = list(self._pin_map.values()) + self.fixed_pins
 
         lats = [pin.location[0] for pin in pins]
         lons = [pin.location[1] for pin in pins]
@@ -94,12 +94,18 @@ class DynamicMapView(toga.MapView):
     # --- Helper for Row -> Pin Conversion ---
 
     def _create_pin_from_row(self, row: Row) -> toga.MapPin | None:
-        if row._instance.latitude and row._instance.longitude: # pyright: ignore [reportAttributeAccessIssue]
-            lat = row._instance.latitude # pyright: ignore [reportAttributeAccessIssue]
-            lon = row._instance.longitude # pyright: ignore [reportAttributeAccessIssue]
+        if (
+            row._instance.latitude and row._instance.longitude # pyright: ignore [reportAttributeAccessIssue]
+        ):
+            lat = row._instance.latitude  # pyright: ignore [reportAttributeAccessIssue]
+            lon = (
+                row._instance.longitude # pyright: ignore [reportAttributeAccessIssue]
+            )
 
             return toga.MapPin(
-                location=(lat, lon), title=row.title, subtitle=row.subtitle # pyright: ignore [reportAttributeAccessIssue]
+                location=(lat, lon),
+                title=row.title, # pyright: ignore [reportAttributeAccessIssue]
+                subtitle=row.subtitle,  # pyright: ignore [reportAttributeAccessIssue]
             )
         else:
             return None
@@ -341,7 +347,7 @@ class LabelledProgress(toga.Box):
         self.bar.start()
         self.update(0)
 
-    def update(self, value: int | float):
+    def update(self, value: float):
         """
         Updates current progress value and updates status text label.
 
@@ -460,6 +466,7 @@ class PlatformUtils(GenericUtils):
     """
     Fallback implementation of platform-specific utilities for non-iOS platforms.
     """
+
     @staticmethod
     def close_keyboard(widget):
         pass
