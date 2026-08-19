@@ -1,6 +1,7 @@
-from rubicon.objc import Block, ObjCClass, ObjCInstance
 import threading
+
 import toga
+from rubicon.objc import Block, ObjCClass, ObjCInstance
 
 done = threading.Event()
 

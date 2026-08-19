@@ -8,19 +8,21 @@ and "Help" (rendered Markdown documentation webview).
 
 import asyncio
 import sys
-import httpx
-from markdown import markdown as md
-from pathlib import Path
-from rubicon.objc import NSObject, ObjCInstance, objc_method, objc_property, SEL
-from rubicon.objc.runtime import objc_id
-import toga
 import traceback
+from typing import cast
 import urllib
+from pathlib import Path
+
+import httpx
+import toga
+from markdown import markdown as md
+
+if sys.platform == "ios":
+    from rubicon.objc import SEL, NSObject, ObjCInstance, objc_method, objc_property
+    from rubicon.objc.runtime import objc_id
 
 from . import bridge as b
-
 from . import db as d
-
 from . import geography as g
 from . import model as m
 from . import settings as s
@@ -53,9 +55,9 @@ class Prototype:
         self.icon_path = self.this_path / "resources" / "icons"
         self.template_path = self.this_path / "resources" / "templates"
         d.init(self.data_path / f"{self.title}.db")  # set up DB
-        self.app.routes = m.RouteGenerator()
-        self.app.routes.on_progress_update = self.progress_update
-        self.app.loop.call_soon(self.app.routes.trigger_full_recalculate)
+        self.routes = m.RouteGenerator()
+        self.routes.on_progress_update = self.progress_update
+        self.app.loop.call_soon(self.routes.trigger_full_recalculate)
 
     def _error(self, title, text):
         print(f"⚠ {title}: {text}")
@@ -77,7 +79,7 @@ class Prototype:
         """
         g.open_in_maps([(row._instance.latitude, row._instance.longitude, row.title)])
 
-    async def add_address(self, text: str = None, url: str = None):
+    async def add_address(self, text: str | None = None, url: str | None = None):
         """
         Geocodes a search string or resolves a Apple Maps URL to save a new target address.
 
@@ -86,54 +88,54 @@ class Prototype:
         :param url: Apple Maps URL string.
         :type url: str | None
         """
-
-        def record_item(mi):
-            d.Address.create(
-                title=str(mi.name),
-                subtitle=str(
-                    mi.addressRepresentations.fullAddressIncludingRegion(
-                        False, singleLine=True
-                    )
-                ),
-                latitude=mi.location.coordinate.latitude,
-                longitude=mi.location.coordinate.longitude,
-            )
-            self._info("Address Added", str(mi.name))
-
-        def geocoded(r: objc_id, e: objc_id) -> None:
-            if e:
-                self._error("Search Failure", ObjCInstance(e).localizedDescription)
-            else:
-                map_items_list = list(ObjCInstance(r))
-                if len(map_items_list) == 1:
-                    record_item(map_items_list[0])
-                else:
-                    self._error("Search Failure", "Could not determine address")
-                    record_item(b.MKMapItem.alloc().initWithLocation(loc))
-
-        if url:
-            pu = urllib.parse.urlparse(url)
-            if pu.netloc in ["maps.apple", "maps.app.goo.gl"]:
-                try:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
-                        response = await client.get(url, allow_redirects=True)
-                        response.raise_for_status()
-                        await self.add_address(url=response.url)
-                except Exception as e:
-                    self._error("URL Error", f"Could not get short URL: {e}")
-            elif pu.netloc == "maps.apple.com":
-                p = urllib.parse.parse_qs(pu.query)
-                loc = b.CLLocation.alloc().initWithLatitude(
-                    float((ll := p["coordinate"][0].split(","))[0]),
-                    longitude=float(ll[1]),
+        if sys.platform == "ios":
+            def record_item(mi):
+                d.Address.create(
+                    title=str(mi.name),
+                    subtitle=str(
+                        mi.addressRepresentations.fullAddressIncludingRegion(
+                            False, singleLine=True
+                        )
+                    ),
+                    latitude=mi.location.coordinate.latitude,
+                    longitude=mi.location.coordinate.longitude,
                 )
-                rgr = b.MKReverseGeocodingRequest.alloc().initWithLocation(loc)
-                rgr.getMapItemsWithCompletionHandler(geocoded)
+                self._info("Address Added", str(mi.name))
+
+            def geocoded(r: objc_id, e: objc_id) -> None:
+                if e:
+                    self._error("Search Failure", ObjCInstance(e).localizedDescription)
+                else:
+                    map_items_list = list(ObjCInstance(r))
+                    if len(map_items_list) == 1:
+                        record_item(map_items_list[0])
+                    else:
+                        self._error("Search Failure", "Could not determine address")
+                        record_item(b.MKMapItem.alloc().initWithLocation(loc))
+
+            if url:
+                pu = urllib.parse.urlparse(url)
+                if pu.netloc in ["maps.apple", "maps.app.goo.gl"]:
+                    try:
+                        async with httpx.AsyncClient(timeout=5.0) as client:
+                            response = await client.get(url, allow_redirects=True)
+                            response.raise_for_status()
+                            await self.add_address(url=response.url)
+                    except httpx.HTTPError as e:
+                        self._error("URL Error", f"Could not get short URL: {e}")
+                elif pu.netloc == "maps.apple.com":
+                    p = urllib.parse.parse_qs(pu.query)
+                    loc = b.CLLocation.alloc().initWithLatitude(
+                        float((ll := p["coordinate"][0].split(","))[0]),
+                        longitude=float(ll[1]),
+                    )
+                    rgr = b.MKReverseGeocodingRequest.alloc().initWithLocation(loc)
+                    rgr.getMapItemsWithCompletionHandler(geocoded)
+                else:
+                    self._error("Search Failure", "Cannot extract location from URL")
             else:
-                self._error("Search Failure", "Cannot extract location from URL")
-        else:
-            gr = b.MKGeocodingRequest.alloc().initWithAddressString(text)
-            gr.getMapItemsWithCompletionHandler(geocoded)
+                gr = b.MKGeocodingRequest.alloc().initWithAddressString(text)
+                gr.getMapItemsWithCompletionHandler(geocoded)
 
     async def add_by_name(self, title: str, name: str):
         """
@@ -151,14 +153,15 @@ class Prototype:
         :param title: Alert action title.
         :param name: Clipboard text fallback.
         """
-        if (
-            (pb := b.UIPasteboard.generalPasteboard).hasURLs
-            and pb.URL
-            and (u := pb.URL.absoluteString)
-        ):
-            await self.add_address(url=str(u))
-        elif pb.hasStrings and (s := pb.string):
-            await self.add_address(text=str(s))
+        if sys.platform == "ios":
+            if (
+                (pb := b.UIPasteboard.generalPasteboard).hasURLs
+                and pb.URL
+                and (u := pb.URL.absoluteString)
+            ):
+                await self.add_address(url=str(u))
+            elif pb.hasStrings and (s := pb.string):
+                await self.add_address(text=str(s))
 
     def ask_for_address(self):
         """
@@ -198,7 +201,7 @@ class Prototype:
             2,
         )
 
-    def get_content(self) -> toga.OptionContainer:
+    def get_content(self) -> toga.OptionContainer | None:
         try:
             """
             Constructs and returns the main Toga OptionContainer view layout with tabs ('List', 'Setup', 'Help').
@@ -212,7 +215,7 @@ class Prototype:
                 Sub-view box for inspecting a specific address, its MapView, and calculated proximity amenities matrix.
                 """
 
-                def __init__(self, row, stack):
+                def __init__(self, parent, row, stack):
                     self.row = row
                     self.stack = stack
                     self.map = ws.DynamicMapView(
@@ -317,17 +320,17 @@ class Prototype:
                     self.list = toga.DetailedList(
                         flex=1,
                         primary_action="View",
-                        on_primary_action=lambda w, row: self.open_directions_in_maps(
+                        on_primary_action=cast(toga.DetailedList.OnPrimaryActionHandler, lambda w, row: self.open_directions_in_maps(
                             row
-                        ),
-                        on_refresh=lambda w: (
+                        )),
+                        on_refresh=cast(toga.DetailedList.OnRefreshActionHandler, lambda w: (
                             d.Route.delete()
                             .where(d.Route.address == row._instance)
                             .execute(),
                             self.app.loop.call_soon(
-                                self.app.routes.trigger_full_recalculate
-                            ),
-                        ),
+                                parent.routes.trigger_full_recalculate
+                            ) if self.app else None,
+                        )),
                         on_select=self.select_from_list,
                         data=d.DBListSource(model_or_query=row._instance.routes),
                     )
@@ -347,9 +350,9 @@ class Prototype:
                                     toga.Button(
                                         "Back",
                                         flex=1,
-                                        on_press=lambda w: self.app.widgets[
+                                        on_press=lambda _: self.app.widgets[
                                             self.stack
-                                        ].pop(),
+                                        ].pop() if self.app else None,
                                     ),
                                 ]
                             ),
@@ -446,9 +449,9 @@ class Prototype:
                                     toga.Button(
                                         "Back",
                                         flex=1,
-                                        on_press=lambda w: self.app.widgets[
+                                        on_press=lambda _: self.app.widgets[
                                             self.stack
-                                        ].pop(),
+                                        ].pop() if self.app else None,
                                     ),
                                     toga.Button(
                                         "Save",
@@ -459,17 +462,17 @@ class Prototype:
                                                 "name",
                                                 self.app.widgets[
                                                     "edit_service_name"
-                                                ].value,
+                                                ].value if self.app else "",
                                             ),
                                             setattr(
                                                 self.row._instance,
                                                 "emoji",
                                                 self.app.widgets[
                                                     "edit_service_emoji"
-                                                ].value,
+                                                ].value if self.app else "",
                                             ),
                                             self.row._instance.save(),
-                                            self.app.widgets[self.stack].pop(),
+                                            self.app.widgets[self.stack].pop() if self.app else None,
                                         ),
                                     ),
                                 ]
@@ -502,14 +505,14 @@ class Prototype:
                                 toga.DetailedList(
                                     flex=1,
                                     primary_action="View",
-                                    on_primary_action=lambda w, row: self.open_address_in_maps(
+                                    on_primary_action=cast(toga.DetailedList.OnPrimaryActionHandler, lambda w, row: self.open_address_in_maps(
                                         row
-                                    ),
+                                    )),
                                     secondary_action="Delete",
-                                    on_secondary_action=lambda w, row: row._instance.delete_instance(),
+                                    on_secondary_action=cast(toga.DetailedList.OnSecondaryActionHandler, lambda w, row: row._instance.delete_instance()),
                                     on_select=lambda w: self.app.widgets[
                                         "stack_list"
-                                    ].push(ViewAddressBox(w.selection, "stack_list")),
+                                    ].push(ViewAddressBox(self, w.selection, "stack_list")),
                                     accessors=("title", "summary", "icon"),
                                     data=d.DBListSource.create_address_summary(),  # d.DBListSource(d.Address.get_summary_list(), ['title', 'subtitle', 'summary', 'icon'], related_models=[d.Route])
                                 ),
@@ -518,7 +521,7 @@ class Prototype:
                                     zoom=7,
                                     on_select=lambda w, pin: (
                                         self.app.widgets["stack_list"].push(
-                                            ViewAddressBox(row, "stack_list")
+                                            ViewAddressBox(self, row, "stack_list")
                                         )
                                         if (row := w.row_of_pin(pin))
                                         else None
@@ -557,12 +560,8 @@ class Prototype:
                                 ),
                                 toga.DetailedList(
                                     flex=1,
-                                    primary_action="View",
-                                    on_primary_action=lambda w, row: asyncio.create_task(
-                                        self.todo("View")
-                                    ),
                                     secondary_action="Delete",
-                                    on_secondary_action=lambda w, row: row._instance.delete_instance(),
+                                    on_secondary_action=cast(toga.DetailedList.OnSecondaryActionHandler, lambda w, row: row._instance.delete_instance()),
                                     on_select=lambda w: self.app.widgets[
                                         "stack_setup"
                                     ].push(EditServiceBox(w.selection, "stack_setup")),
@@ -590,19 +589,57 @@ class Prototype:
                             children=[
                                 toga.WebView(
                                     content=f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.6; padding: 20px; color: #333; }}
-                code {{ background-color: #f6f8fa; padding: 2px 4px; border-radius: 3px; font-family: monospace; }}
-                pre {{ background-color: #f6f8fa; padding: 16px; overflow: auto; border-radius: 6px; }}
-                img {{ max-width: 100%; height: auto; }}
-            </style>
-        </head>
-        <body>
-                     {md(f.read_text() if (f := (self.template_path / "help.md")).exists() else "")}
-        </body>
-        </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Configures iOS viewport: sets width, prevents horizontal scroll, and fits notch/home indicator areas -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  
+  <!-- Informs the browser that the site supports both light and dark system themes -->
+  <meta name="color-scheme" content="light dark">
+  
+  <title>Embedded Content</title>
+
+  <style>
+    /* CSS Variables using light-dark() to switch automatically based on system preference */
+    :root {{
+      color-scheme: light dark;
+      --bg-color: light-dark(#ffffff, #121212);
+      --text-color: light-dark(#1c1c1e, #f2f2f7);
+      --card-bg: light-dark(#f2f2f7, #1c1c1e);
+      --border-color: light-dark(#e5e5ea, #3a3a3c);
+    }}
+
+    /* Prevent accidental horizontal overflow */
+    *, *::before, *::after {{
+      box-sizing: border-box;
+    }}
+
+    body {{
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      
+      /* Ensures text wraps properly when zoomed */
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }}
+
+    /* Images scale down to fit container width, preventing layout break on zoom */
+    img, video, svg {{
+      max-width: 100%;
+      height: auto;
+    }}
+  </style>
+</head>
+<body>
+    {md(f.read_text() if (f := (self.template_path / "help.md")).exists() else "")}
+</body>
+</html>
 """,
                                     flex=1,
                                 )
@@ -612,9 +649,9 @@ class Prototype:
                     ),
                 ],
             )
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
             traceback.print_exc()
-            self._error("UI Error", f"{str(e)}, see log.")
+            self._error("UI Error", f"{e!s}, see log.")
 
     def progress_update(self, is_busy, done, total):
         if "app_activity" in self.app.widgets:

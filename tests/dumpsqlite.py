@@ -1,4 +1,5 @@
 import sqlite3
+
 import toga
 
 # File paths

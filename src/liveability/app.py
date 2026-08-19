@@ -5,10 +5,16 @@ Manages application startup (`MyApp`), redirects standard output/error to disk (
 and checks the iOS user sandbox (`~/Documents/patch_app.py`) for live runtime overrides.
 """
 
-from pathlib import Path
+import asyncio
 import sys
-import toga
+import threading
 import traceback
+from collections.abc import Callable
+from pathlib import Path
+from types import TracebackType
+from typing import Any, cast
+
+import toga
 
 from . import ui
 
@@ -21,10 +27,22 @@ class LogRedirector:
     :type log_path: str | Path
     """
 
-    def __init__(self, log_path):
-        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-        self.log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+    def __init__(self, log_path: Path):
+        """
+        Creates the log redirector that will duplicate output to the given log_path.
+        """
+        self.log_path = log_path or Path("./app_runtime.log")
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_file = self.log_path.open(mode="a", buffering=1, encoding="utf-8")
         self.terminal = sys.__stdout__  # both out and err end up in out
+
+    def isatty(self) -> bool:
+        # Hopefully this only prevents fancy not all input!
+        return False
+
+    @property
+    def path(self) -> Path:
+        return self.log_path
 
     def write(self, message: str) -> None:
         """
@@ -33,23 +51,36 @@ class LogRedirector:
         :param message: String output message.
         :type message: str
         """
-        self.terminal.write(message)
+        if self.terminal:
+            self.terminal.write(message)
         self.log_file.write(message)
 
     def flush(self) -> None:
         """
         Flushes terminal and log file buffers.
         """
-        self.terminal.flush()
+        if self.terminal:
+            self.terminal.flush()
         self.log_file.flush()
 
 
 class MyApp(toga.App):
     """
-    Main Toga Application instance for Liveability.
+    Main Toga Application instance
     """
+    def __init__(self, user_documents_dir: Path | None = None, **kwargs: Any):
+        """
+        Initializes the Toga application instance.
 
-    def startup_into(app, fresh: bool = False):
+        :param user_documents_dir: Optional path to user Documents folder for log redirection.
+        :type user_documents_dir: Path | None
+        :param kwargs: Additional keyword arguments for Toga App initialization.
+        """
+        self.user_documents_dir = user_documents_dir or Path("~/Documents").expanduser()
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def startup_into(app: toga.App, fresh: bool = False) -> None:
         """
         Constructs and presents the application main window and prototype layout.
 
@@ -60,31 +91,89 @@ class MyApp(toga.App):
         """
         if fresh:
             app.main_window = toga.MainWindow(title=app.formal_name)
+        mw = app.main_window
+        assert isinstance(mw, toga.MainWindow)
+
+        def global_generic_exception_handler(
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            exc_traceback: TracebackType | None,
+            exc_message: str | None = None,
+        ) -> None:
+            """
+            Generic handler of uncaught exceptions into a Toga dialog via a threadsafe task.
+            """
+            if exc_traceback:
+                traceback.print_tb(exc_traceback)
+            app.loop.call_soon_threadsafe(
+                cast(
+                    Callable[[], None],
+                    lambda mw=mw: asyncio.create_task(
+                        mw.dialog(
+                            toga.ErrorDialog(
+                                "Error Occurred",
+                                exc_message if exc_message else str(exc_value),
+                            )
+                        )
+                    ),
+                )
+            )
+
+        def global_async_exception_handler(
+            _loop: asyncio.AbstractEventLoop, context: dict[str, Any]
+        ) -> None:
+            """
+            Trigger for uncaught exceptions via the asyncio event loop.
+            """
+            global_generic_exception_handler(
+                None, context.get("exception"), context.get("source_traceback")
+            )
+
+        def global_sync_exception_handler(
+            exc_type: type[BaseException],
+            exc_value: BaseException,
+            exc_traceback: TracebackType | None,
+        ) -> None:
+            """
+            Trigger for normal uncaught exceptions.
+            """
+            global_generic_exception_handler(exc_type, exc_value, exc_traceback)
+
+        def global_thread_exception_handler(args: threading.ExceptHookArgs) -> None:
+            """
+            Trigger for threaded uncaught exceptions.
+            """
+            global_generic_exception_handler(
+                args.exc_type, args.exc_value, args.exc_traceback
+            )
+
+        # Set up standard Python thread hooks
+        sys.excepthook = global_sync_exception_handler
+        threading.excepthook = global_thread_exception_handler
+
+        # Attach custom handler to Toga's asyncio loop
+        loop = asyncio.get_event_loop()
+        loop.set_exception_handler(global_async_exception_handler)
 
         try:
-            app.proto = ui.Prototype(
-                host_app=app, on_done=lambda _: MyApp.unstack_from(app)
-            )
+            app.proto = (p := ui.Prototype(host_app=app, on_done=lambda _: MyApp.unstack_from(app))) # pyright: ignore [reportAttributeAccessIssue]
 
-            t = getattr(app.proto, "title", app.formal_name)
-            mw = app.main_window
+            t = p.title or app.formal_name
             if mw.content:
                 if not hasattr(mw, "content_stack"):
-                    mw.content_stack = []
-                mw.content_stack.append((mw.title, mw.content))
+                    mw.content_stack = [] # pyright: ignore [reportAttributeAccessIssue]
+                getattr(mw, "content_stack", []).append((mw.title, mw.content))
             mw.title = t
-            if c := app.proto.get_content():
-                mw.content = c
-        except Exception as e:
+            mw.content = p.get_content()
+        except Exception as e: # noqa: BLE001
             traceback.print_exc()
-            app.loop.call_soon(
-                app.main_window.dialog(toga.ErrorDialog("Error Occurred", str(e)))
-            )
+            app.loop.create_task(mw.dialog(toga.ErrorDialog("Error Occurred", str(e))))
         finally:
-            if not app.main_window.visible:
+            if not mw.visible:
                 mw.show()
 
-    def unstack_from(app):
+    @staticmethod
+    def unstack_from(app: toga.App) -> None:
         """
         Pops and restores the previous window view layout from the content stack.
 
@@ -92,23 +181,24 @@ class MyApp(toga.App):
         :type app: toga.App
         """
         if (
-            hasattr(app.main_window, "content_stack")
-            and len(app.main_window.content_stack) > 0
+            hasattr(mw := app.main_window, "content_stack")
+            and len(cs := getattr(mw, "content_stack", [])) > 0
         ):
-            t, c = app.main_window.content_stack.pop()
-            app.main_window.title = t
-            app.main_window.content = c
+            t, c = cs.pop()
+            assert isinstance(mw, toga.MainWindow)
+            mw.title = t
+            mw.content = c
 
-    def startup(self):
+    def startup(self) -> None:
         """
         Standard Toga application startup callback. Initializes main window and UI content.
 
         :returns: Result of :meth:`startup_into`.
         """
-        return MyApp.startup_into(self, True)
+        MyApp.startup_into(self, True)
 
 
-def bootstrap_application():
+def bootstrap_application() -> Any:
     """
     Bootstraps the application environment on device launch.
 
@@ -121,7 +211,7 @@ def bootstrap_application():
     :rtype: toga.App
     """
 
-    # This is equivalent to the toga.App.app.paths.data
+    # This is equivalent to the toga.App.app.paths.data on many platforms
     user_documents_dir = Path("~/Documents").expanduser()
     user_documents_dir.mkdir(parents=True, exist_ok=True)
 
@@ -137,7 +227,7 @@ def bootstrap_application():
             readme.write_text(
                 "This folder is used for logging and customising this app."
             )
-        except Exception as e:
+        except OSError as e:
             print(f"Failed to write placeholder: {e}")
 
     hot_patch_file = user_documents_dir / "patch_app.py"
@@ -146,20 +236,21 @@ def bootstrap_application():
         print(f"Hot-Patch Intercepted on Device Storage: {hot_patch_file}")
         try:
             sys.path.insert(0, str(user_documents_dir))
-            import patch_app
+            import patch_app  # type: ignore
 
             print("Hot-patch workspace parsed and executed flawlessly.")
             return patch_app.main()
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
             print(f"Hot-patch execution runtime failure: {e}")
             print(
                 "Gracefully routing application boot back to compiled factory core..."
             )
 
-    return MyApp()
+    print(f"creating MyApp with user_documents_dir: {user_documents_dir}")
+    return MyApp(user_documents_dir)
 
 
-def main():
+def main() -> toga.App | None:
     """
     Application entry point called by Briefcase or __main__.py.
 
@@ -169,7 +260,7 @@ def main():
     if not (a := toga.App.app):
         return bootstrap_application()
     elif a.loop:
-        a.loop.call_soon(lambda a=a: MyApp.startup_into(a))
+        a.loop.call_soon(cast(Callable[[], None], lambda a=a: MyApp.startup_into(a)))
     else:
         MyApp.startup_into(a)
     return None

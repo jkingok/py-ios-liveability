@@ -1,24 +1,26 @@
+from collections.abc import Callable, Sequence
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Self
+
+import toga
 from peewee import (
-    SqliteDatabase,
-    Proxy,
-    Select,
+    JOIN,
     AutoField,
+    Case,
     CharField,
     Field,
     FloatField,
     ForeignKeyField,
     IntegerField,
+    Proxy,
+    Select,
+    SqliteDatabase,
     fn,
-    JOIN,
-    Case,
 )
 from playhouse.signals import Model, post_delete, post_save
-import toga
 from toga.sources import ListSource, Row
-from typing import Any, Callable, Self, Sequence
 
 from . import geography as g
 
@@ -107,8 +109,8 @@ class Address(BaseModel):
                     )
                 ).alias("error_count"),
             )
-            .join(Route, JOIN.LEFT_OUTER, on=(cls.id == Route.address))
-            .group_by(cls.id)
+            .join(Route, JOIN.LEFT_OUTER, on=(cls.id == Route.address)) # pyright: ignore [reportAttributeAccessIssue]
+            .group_by(cls.id) # pyright: ignore [reportAttributeAccessIssue]
         )
 
 
@@ -173,19 +175,19 @@ class TravelMode(Enum):
 
         # Initialize reverse maps on class if they don't exist yet
         if not hasattr(self.__class__, "_by_label"):
-            self.__class__._by_label: dict[str, Self] = {}
-            self.__class__._by_code: dict[int, Self] = {}
+            self.__class__._by_label = {} #: dict[str, Self] = {} # pyright: ignore [reportAttributeAccessIssue]
+            self.__class__._by_code = {} #: dict[int, Self] = {} # pyright: ignore [reportAttributeAccessIssue]
 
         # Populate O(1) mappings
-        self.__class__._by_label[label] = self
-        self.__class__._by_code[code] = self
+        self.__class__._by_label[label] = self # pyright: ignore [reportAttributeAccessIssue]
+        self.__class__._by_code[code] = self # pyright: ignore [reportAttributeAccessIssue]
 
     # --- O(1) Class Methods ---
     @classmethod
     def from_label(cls, label: str) -> Self:
         """O(1) lookup by human-readable string."""
         try:
-            return cls._by_label[label]
+            return cls._by_label[label] # pyright: ignore [reportAttributeAccessIssue]
         except KeyError:
             raise ValueError(f"No {cls.__name__} member with label '{label}'") from None
 
@@ -193,7 +195,7 @@ class TravelMode(Enum):
     def from_code(cls, code: int) -> Self:
         """O(1) lookup by code."""
         try:
-            return cls._by_code[code]
+            return cls._by_code[code] # pyright: ignore [reportAttributeAccessIssue]
         except KeyError:
             raise ValueError(f"No {cls.__name__} member with code '{code}'") from None
 
@@ -214,7 +216,7 @@ class Route(BaseModel):
     mode = EnumField(TravelMode, value_attr="code", null=True)
     error = CharField(null=True)
 
-    class Meta:
+    class Meta: # pyright: ignore [reportIncompatibleVariableOverride]
         indexes = ((("address", "service"), True),)
 
     @property
@@ -232,8 +234,8 @@ class Route(BaseModel):
             if self.error
             else g.format_eta(
                 str(self.mode),
-                self.time,
-                self.distance,
+                self.time or 0.0,
+                self.distance or 0.0,
                 self.time_return,
                 self.distance_return,
             )
@@ -242,19 +244,20 @@ class Route(BaseModel):
 
 class _Manager:
     def __init__(self, db_path: Path) -> None:
-        self.db = SqliteDatabase(db_path, pragmas={"foreign_keys": 1})
+        self.db = SqliteDatabase(str(db_path), pragmas={"foreign_keys": 1})
         db_ref.initialize(self.db)
         self.db.connect()
         self.db.create_tables([Address, Service, Route])
         # Delete routes where the referenced address no longer exists
-        Route.delete().where(Route.address.not_in(Address.select(Address.id))).execute()
-        Route.delete().where(Route.service.not_in(Service.select(Service.id))).execute()
+        Route.delete().where(Route.address.not_in(Address.select(Address.id))).execute() # pyright: ignore [reportAttributeAccessIssue]
+        Route.delete().where(Route.service.not_in(Service.select(Service.id))).execute() # pyright: ignore [reportAttributeAccessIssue]
 
 
 @lru_cache(maxsize=1)
 def init(db_path: Path | None = None) -> None:
     global mgr
-    mgr = _Manager(db_path)
+    if db_path:
+        mgr = _Manager(db_path)
 
 
 class DBListSource(ListSource):
@@ -284,7 +287,7 @@ class DBListSource(ListSource):
 
         if isinstance(model_or_query, Select):
             self.query = model_or_query
-            self.model_cls = model_or_query.model
+            self.model_cls = model_or_query.model # pyright: ignore [reportAttributeAccessIssue]
         else:
             self.model_cls = model_or_query
             self.query = model_or_query.select()
@@ -316,8 +319,8 @@ class DBListSource(ListSource):
                 name=f"{dispatch_uid}_rel_{rel_model.__name__}_{idx}_delete",
             )
 
-        if watch_routes:
-            toga.App.app.routes.register(self.reload_from_db)
+        if watch_routes and toga.App.app and hasattr(toga.App.app, "routes"):
+            toga.App.app.routes.register(self.reload_from_db) # pyright: ignore [reportAttributeAccessIssue]
 
         self.reload_from_db()
 
@@ -336,14 +339,14 @@ class DBListSource(ListSource):
         values = {
             f: (getattr(instance, f))  # if getattr(instance, f) is not None else "")
             for f in self._accessors
-        }
+        } if self._accessors else {}
         values["_instance"] = instance
         return values
 
     def _find_row_by_instance(self, instance: Model) -> tuple[int, Row | None]:
         """Finds the index and Row object corresponding to a Peewee model instance."""
-        pk = instance._pk
-        for index, row in enumerate(self):
+        pk = instance._pk # pyright: ignore [reportAttributeAccessIssue]
+        for index, row in enumerate(self): # pyright: ignore [reportArgumentType]
             if hasattr(row, "_instance") and row._instance._pk == pk:
                 return index, row
         return -1, None
@@ -357,7 +360,7 @@ class DBListSource(ListSource):
             self._notify_count()
         else:
             # 2. UPDATED ITEM: Locate existing row and update attributes in place
-            idx, row = self._find_row_by_instance(instance)
+            _, row = self._find_row_by_instance(instance)
             if row is not None:
                 # Update attributes on the existing Toga Row
                 for key, val in row_data.items():
@@ -367,11 +370,11 @@ class DBListSource(ListSource):
                 row._instance = instance
 
                 # Notify attached Toga listeners (like MapView or DetailedList) of row updates
-                self._notify("change", item=row)
+                self._notify("change", item=row) # pyright: ignore [reportAttributeAccessIssue]
 
     def _on_post_delete(self, sender, instance, **kwargs) -> None:
         # 3. DELETED ITEM: Locate and remove only the deleted row
-        idx, row = self._find_row_by_instance(instance)
+        _, row = self._find_row_by_instance(instance)
         if row is not None:
             self.remove(row)
             self._notify_count()
@@ -393,7 +396,7 @@ class DBListSource(ListSource):
             row_data = {
                 f: (getattr(instance, f) if getattr(instance, f) is not None else "")
                 for f in self._accessors
-            }
+            } if self._accessors else {}
             row_data["_instance"] = instance
             # Bypassing explicit Row instantiation by appending dict directly
             self.append(row_data)
@@ -402,9 +405,9 @@ class DBListSource(ListSource):
     def add_instance(self, instance: Model) -> Row:
         instance.save()
         # post_save signal will handle reload_from_db() automatically
-        return self[-1] if len(self) > 0 else None
+        return self[-1] if len(self) > 0 else Row()
 
     def remove_instance(self, row: Row) -> None:
         if hasattr(row, "_instance"):
-            row._instance.delete_instance()
+            row._instance.delete_instance() # pyright: ignore [reportAttributeAccessIssue]
             # post_delete signal handles reload_from_db() automatically

@@ -9,6 +9,7 @@ import sys
 
 if sys.platform == "ios":
     import ctypes
+
     from rubicon.objc import ObjCClass, ObjCInstance
     from rubicon.objc.runtime import load_library
     from rubicon.objc.types import ctype_for_encoding

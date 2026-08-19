@@ -5,11 +5,13 @@ Provides `AddressModel`, `ServiceModel`, and `ComparisonModel` singletons that b
 records to Toga GUI `ListSource` data providers and manage asynchronous proximity search queues.
 """
 
-from playhouse.signals import post_save
-from queue import Queue
-import toga
 import traceback
-from typing import Callable
+from collections.abc import Callable
+from queue import Queue
+
+import toga
+from peewee import DatabaseError
+from playhouse.signals import post_save
 
 from . import db as d
 from . import geography as g
@@ -84,7 +86,8 @@ class RouteGenerator:
     def _ensure_worker_running(self) -> None:
         if not self._queue.empty():
             self._notify_ui(is_busy=True)
-            toga.App.app.loop.create_task(self._do_queue())
+            if toga.App.app:
+                toga.App.app.loop.create_task(self._do_queue())
 
     async def _do_queue(self) -> None:
         """Background thread executing the route calculations."""
@@ -100,7 +103,7 @@ class RouteGenerator:
                     **await self._compute_and_save_route(address, service)
                 ).execute()
                 # ------------------------------------------
-            except Exception as e:
+            except (RuntimeError, DatabaseError) as e:
                 traceback.print_exc()
                 d.Route.replace(
                     address=address, service=service, error=str(e)
@@ -125,27 +128,27 @@ class RouteGenerator:
         self, address: d.Address, service: d.Service
     ) -> dict:
         # Find the first matching service for the location
-        destination = await g.perform_search_at(
+        _, destination = await g.perform_search_at(
             service.title, address.latitude, address.longitude
         )
         if destination:
             for m in "🥾🚲🚗":
-                eta = await g.perform_eta(
+                _, eta = await g.perform_eta(
                     (address.latitude, address.longitude), destination[1], m
                 )
-                if eta[1].expectedTravelTime < 11 * 60 or m == "🚗":
-                    eta2 = await g.perform_eta(
-                        destination[1], (address.latitude, address.longitude), m
+                if eta and (eta.expectedTravelTime < 11 * 60 or m == "🚗"):
+                    _, eta2 = await g.perform_eta(
+                        destination, (address.latitude, address.longitude), m
                     )
                     return {
                         "address": address,
                         "service": service,
-                        "latitude": destination[1].location.coordinate.latitude,
-                        "longitude": destination[1].location.coordinate.longitude,
-                        "distance": eta[1].distance,
-                        "time": eta[1].expectedTravelTime,
-                        "distance_return": eta2[1].distance,
-                        "time_return": eta2[1].expectedTravelTime,
+                        "latitude": destination.location.coordinate.latitude,
+                        "longitude": destination.location.coordinate.longitude,
+                        "distance": eta.distance,
+                        "time": eta.expectedTravelTime,
+                        "distance_return": eta2.distance if eta2 else eta.distance,
+                        "time_return": eta2.expectedTravelTime if eta2 else eta.expectedTravelTime,
                         "mode": d.TravelMode.from_label(m),
                         "error": None,
                     }

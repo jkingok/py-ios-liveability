@@ -5,8 +5,9 @@ Manages loading, persisting, and default template fallback for application optio
 via pure-Python `tomlkit`.
 """
 
-from pathlib import Path
 import shutil
+from pathlib import Path
+
 import tomlkit  # Pure-Python style-preserving library
 
 CONFIG_NAME = "config.toml"

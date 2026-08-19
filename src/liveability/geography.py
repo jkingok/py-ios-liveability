@@ -6,12 +6,13 @@ travel time estimates (`MKDirectionsRequest`), and launches target locations in 
 """
 
 import sys
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 if sys.platform == "ios":
+    import toga
     from rubicon.objc import Block, ObjCClass, ObjCInstance
     from rubicon.objc.runtime import objc_id
-    import toga
 
     from . import bridge as b
 
@@ -307,7 +308,7 @@ else:
         else:
             return f"By {mode} in {minutes} and {metres}"
 
-    def perform_search_at(
+    async def perform_search_at(
         search_string: str, latitude: float, longitude: float
     ) -> tuple[str, None]:
         return ("Search not supported on this platform", None)
@@ -320,3 +321,11 @@ else:
         both: bool = False,
     ) -> None:
         pass
+
+    async def perform_eta(
+        fro: object | tuple[float, float],
+        to: object | tuple[float, float],
+        mode: str,
+        both: bool = False,
+    ) -> tuple[str, None]:
+        return ("Directions not supported on this platform", None)

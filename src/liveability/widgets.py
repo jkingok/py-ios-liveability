@@ -8,10 +8,12 @@ dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via
 
 import asyncio
 import math
+import sys
 from pathlib import Path
+from typing import Any
+
 import toga
 from toga.sources import ListSource, Row
-from typing import Any
 
 
 class DynamicLabel(toga.Label):
@@ -50,8 +52,8 @@ class DynamicMapView(toga.MapView):
             # self.source_change(data)
             for p in self.fixed_pins:
                 self.pins.add(p)
-            for row in data:
-                self.source_insert(None, row)
+            for idx, row in enumerate(data): # pyright: ignore [reportArgumentType]
+                self.source_insert(idx, row)
             data.add_listener(self)
 
     # --- Centroid Calculation ---
@@ -92,12 +94,12 @@ class DynamicMapView(toga.MapView):
     # --- Helper for Row -> Pin Conversion ---
 
     def _create_pin_from_row(self, row: Row) -> toga.MapPin | None:
-        if row._instance.latitude and row._instance.longitude:
-            lat = row._instance.latitude
-            lon = row._instance.longitude
+        if row._instance.latitude and row._instance.longitude: # pyright: ignore [reportAttributeAccessIssue]
+            lat = row._instance.latitude # pyright: ignore [reportAttributeAccessIssue]
+            lon = row._instance.longitude # pyright: ignore [reportAttributeAccessIssue]
 
             return toga.MapPin(
-                location=(lat, lon), title=row.title, subtitle=row.subtitle
+                location=(lat, lon), title=row.title, subtitle=row.subtitle # pyright: ignore [reportAttributeAccessIssue]
             )
         else:
             return None
@@ -234,8 +236,10 @@ class LabelledSelection(toga.Box):
     """
 
     def __init__(
-        self, label_text: str, value_text="", value_list=[], callback=None, id=None
+        self, label_text: str, value_text="", value_list=None, callback=None, id=None
     ):
+        if value_list is None:
+            value_list = []
         super().__init__(
             direction="row",
             align_items="center",
@@ -337,7 +341,7 @@ class LabelledProgress(toga.Box):
         self.bar.start()
         self.update(0)
 
-    def update(self, value: int):
+    def update(self, value: int | float):
         """
         Updates current progress value and updates status text label.
 
@@ -377,7 +381,7 @@ class LabelledProgress(toga.Box):
         :returns: True if progress is complete.
         :rtype: bool
         """
-        return self.bar.value >= self.bar.max
+        return self.bar.value >= self.bar.max if self.bar.max else False
 
 
 class LabelledActivity(toga.Box):
@@ -437,7 +441,8 @@ class GenericUtils:
     Generic cross-platform utilities.
     """
 
-    def info_task(w, title: str, text: str):
+    @staticmethod
+    def info_task(w: toga.Widget, title: str, text: str):
         """
         Displays an InfoDialog asynchronously.
 
@@ -447,25 +452,28 @@ class GenericUtils:
         :param text: Dialog message content.
         :type text: str
         """
-        asyncio.create_task(w.app.main_window.dialog(toga.InfoDialog(title, text)))
+        if w.app and isinstance(w.app.main_window, toga.Window):
+            asyncio.create_task(w.app.main_window.dialog(toga.InfoDialog(title, text)))
 
 
 class PlatformUtils(GenericUtils):
     """
     Fallback implementation of platform-specific utilities for non-iOS platforms.
     """
-
+    @staticmethod
     def close_keyboard(widget):
         pass
 
-    def ask_for_input(w, title: str, message: str, actions=[], texts: int = 0):
+    @staticmethod
+    def ask_for_input(widget, title: str, message: str, actions=None, texts: int = 0):
         pass
 
-    def open_share_sheet(w, html_file_path: str):
+    @staticmethod
+    def open_share_sheet(widget, html_file_path: str):
         pass
 
 
-if toga.platform.current_platform == "iOS":
+if sys.platform == "ios":
     from rubicon.objc import ObjCClass, ObjCInstance
 
     # Load the required Objective-C classes
@@ -486,15 +494,13 @@ if toga.platform.current_platform == "iOS":
 
             :param widget: Native Toga text field widget.
             """
-            try:
+            if sys.platform == "ios":
                 if hasattr(widget, "_impl") and hasattr(widget._impl, "native"):
                     native_textfield = widget._impl.native
                     native_textfield.resignFirstResponder()
                     print("[UIKit] Keyboard dismissed via resignFirstResponder.")
-            except Exception as e:
-                print(f"[Platform Fallback] Could not reach native interface: {e}")
 
-        def ask_for_input(w, title: str, message: str, actions=[], texts: int = 0):
+        def ask_for_input(w, title: str, message: str, actions=None, texts: int = 0):
             """
             Presents a native iOS UIAlertController modal with action buttons and text input fields.
 
@@ -508,6 +514,8 @@ if toga.platform.current_platform == "iOS":
             :param texts: Number of text input fields to attach.
             :type texts: int
             """
+            if actions is None:
+                actions = []
             alert = UIAlertController.alertControllerWithTitle(
                 title, message=message, preferredStyle=1
             )
