@@ -61,6 +61,10 @@ jobs:
           briefcase update ios
           #briefcase build ios
 
+          if [ -f "fix_privacy.py" ]; then
+            python3 fix_xcprivacy.py
+          fi
+
           bundle exec fastlane ios beta
 
       - name: Move last_testflight Tag Forward

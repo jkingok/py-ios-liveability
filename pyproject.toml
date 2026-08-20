@@ -19,7 +19,7 @@ icon = "assets/src_icon.png"       # Relative path to this prototype's icon
 project_name = "liveability"
 bundle = "au.id.jking"
 version = "0.0.4"
-url = "https://github.com/jkingok/py-ios/liveability"
+url = "https://github.com/jkingok/py-ios-liveability"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 author = "Joshua King"
@@ -189,13 +189,13 @@ requires = [
 ]
 
 icon = "assets/icons/ios/icon"
-[tool.briefcase.app.liveability.iOS.app]
+#[tool.briefcase.app.liveability.iOS.app]
 # Release versions do not expose a files directory
 # Enable the Files app directory for your app
 info."UIFileSharingEnabled" = true
 
 # Allow opening documents in place
-#info."LSSupportsOpeningDocumentsInPlace" = true
+info."LSSupportsOpeningDocumentsInPlace" = true
 
 [tool.briefcase.app.liveability.android]
 requires = [
