@@ -20,6 +20,51 @@ import toga
 from . import ui
 
 
+class LogRedirector:
+    """
+    Redirects Python stdout and stderr streams to both standard output and a persistent file log.
+
+    :param log_path: Path to target log file on disk.
+    :type log_path: str | Path
+    """
+
+    def __init__(self, log_path: Path):
+        """
+        Creates the log redirector that will duplicate output to the given log_path.
+        """
+        self.log_path = log_path or Path("./app_runtime.log")
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_file = self.log_path.open(mode="a", buffering=1, encoding="utf-8")
+        self.terminal = sys.__stdout__  # both out and err end up in out
+
+    def isatty(self) -> bool:
+        # Hopefully this only prevents fancy not all input!
+        return False
+
+    @property
+    def path(self) -> Path:
+        return self.log_path
+
+    def write(self, message: str) -> None:
+        """
+        Writes a message string to terminal stdout and log file simultaneously.
+
+        :param message: String output message.
+        :type message: str
+        """
+        if self.terminal:
+            self.terminal.write(message)
+        self.log_file.write(message)
+
+    def flush(self) -> None:
+        """
+        Flushes terminal and log file buffers.
+        """
+        if self.terminal:
+            self.terminal.flush()
+        self.log_file.flush()
+
+
 class MyApp(toga.App):
     """
     Main Toga Application instance
@@ -177,6 +222,12 @@ def bootstrap_application() -> Any:
     # This is equivalent to the toga.App.app.paths.data on many platforms
     user_documents_dir = Path("~/Documents").expanduser()
     user_documents_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = user_documents_dir / "app_runtime.log"
+
+    redirector = LogRedirector(log_path)
+    sys.stdout = redirector
+    sys.stderr = redirector
 
     print(f"creating MyApp with user_documents_dir: {user_documents_dir}")
     return MyApp(user_documents_dir)
