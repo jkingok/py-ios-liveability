@@ -242,7 +242,7 @@ class Prototype:
             2,
         )
 
-    def get_content(self) -> toga.OptionContainer | None:
+    def get_content(self) -> toga.Widget | None:
         try:
             """
             Constructs and returns the main Toga OptionContainer view layout with tabs ('List', 'Setup', 'Help').
@@ -484,7 +484,7 @@ class Prototype:
                         flex=1,
                     )
 
-            return toga.OptionContainer(
+            return ws.OptionContainerFactory(
                 content=[
                     (
                         "List",

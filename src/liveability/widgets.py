@@ -9,12 +9,79 @@ dialogs (`UIAlertController`, `UIActivityViewController`, keyboard dismissal via
 import asyncio
 import math
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import toga
 from toga.sources import ListSource, Row
 
+UIUserInterfaceIdiomPad = 1
+
+def is_ipad_from_window(toga_window: toga.Window) -> bool:
+    """Detects iPad idiom via the native UIWindow / UIViewController trait collection."""
+    # Toga's underlying UIKit native object (UIWindow or UIViewController)
+    return (
+        sys.platform == "ios"
+        and toga_window._impl.native.traitCollection.userInterfaceIdiom
+        == UIUserInterfaceIdiomPad
+    )  # pyright: ignore[reportPrivateUsage]
+
+class NotAnOptionContainer(toga.Box):
+    class CurrentTab:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+    def __init__(
+        self,
+        content: toga.Widget,
+        on_select: Callable[[toga.Widget], None] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self.content = content
+        self.on_selected = on_select
+        super().__init__(
+            direction="column",
+            children=[
+                toga.Column(flex=1),
+                toga.Row(
+                    children=[
+                        toga.Button(tab[0], on_press=self.swap_in, flex=1)  # type: ignore[arg-type]
+                        for tab in content
+                    ]
+                ),
+            ],
+            **kwargs,
+        )
+        self.swap_in_name(self.content[0][0])
+
+    def swap_in_name(self, t: str) -> None:
+        for tab in self.content:
+            if tab[0] == t:
+                tab[1].style.flex = 1
+                self.replace(self.children[0], tab[1])
+                self._current_tab = NotAnOptionContainer.CurrentTab(t)
+                if self.on_selected:
+                    self.on_selected(self)
+                break
+
+    def swap_in(self, w: toga.Button, **kwargs: Any) -> None:
+        self.swap_in_name(w.text)
+
+    @property
+    def current_tab(self) -> CurrentTab:
+        return self._current_tab
+
+    @current_tab.setter
+    def current_tab(self, value: str) -> None:
+        self.swap_in_name(value)
+
+def OptionContainerFactory(*args: Any, **kwargs: Any) -> toga.Widget:
+    assert toga.App.app and isinstance(toga.App.app.main_window, toga.MainWindow)
+    if is_ipad_from_window(toga.App.app.main_window):
+        return NotAnOptionContainer(*args, **kwargs)
+    else:
+        return toga.OptionContainer(*args, **kwargs)
 
 class DynamicLabel(toga.Label):
     def __init__(self, source, formatter=None, **kwargs):
