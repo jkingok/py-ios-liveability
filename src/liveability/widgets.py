@@ -63,7 +63,7 @@ class DynamicMapView(toga.MapView):
         if not self.auto_center or not self._pin_map:
             return
 
-        pins = list(self._pin_map.values()) + self.fixed_pins
+        pins = self.fixed_pins + list(self._pin_map.values())
 
         lats = [pin.location[0] for pin in pins]
         lons = [pin.location[1] for pin in pins]

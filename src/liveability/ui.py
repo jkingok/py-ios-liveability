@@ -68,6 +68,48 @@ from . import model as m
 from . import settings as s
 from . import widgets as ws
 
+if sys.platform == "ios":
+
+    class RouteMapDelegateProxy(NSObject):
+        toga_delegate = objc_property(object, weak=True)
+
+        @objc_method
+        def mapView_rendererForOverlay_(
+            self, mapView: ObjCInstance, overlay: ObjCInstance
+        ) -> ObjCInstance:
+            print(f"rendering overlay for {overlay.title}...")
+            if overlay.isKindOfClass_(b.MKPolyline):
+                renderer = b.MKPolylineRenderer.alloc().initWithPolyline_(overlay)
+
+                # System Blue works on both UIColor (iOS) and NSColor (macOS)
+                renderer.strokeColor = (
+                    b.UIColor.systemBlueColor()
+                    if "out" in str(overlay.title)
+                    else b.UIColor.systemCyanColor()
+                )
+                renderer.lineWidth = 5.0
+                return renderer
+
+            if self.toga_delegate and self.toga_delegate.respondsToSelector_(
+                SEL("mapView:rendererForOverlay:")
+            ):
+                return self.toga_delegate.mapView_rendererForOverlay_(mapView, overlay)
+
+            return None
+
+    @objc_method
+    def respondsToSelector_(self, selector: SEL) -> bool:
+        sel_str = str(selector)
+        if sel_str == "mapView:rendererForOverlay:":
+            return True
+        if self.toga_delegate:
+            return self.toga_delegate.respondsToSelector_(selector)
+        return False
+
+        @objc_method
+        def forwardingTargetForSelector_(self, selector: SEL) -> ObjCInstance:
+            return self.toga_delegate
+
 
 class Prototype:
     """
@@ -290,7 +332,6 @@ class Prototype:
                     )
 
                     if sys.platform == "ios":
-
                         native_map = self.map._impl.native
 
                         # 1. Grab Toga's original self-delegated instance (TogaMapView)
